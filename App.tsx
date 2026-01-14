@@ -22,7 +22,8 @@ import {
   ArrowDownCircle,
   List,
   Bell,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
@@ -45,21 +46,14 @@ const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
   { id: 'pegno', label: 'Pegno', amount: 300, icon: '💍', colorName: 'amber', paidMonths: [], group: 'alternata' },
   { id: 'ass-auto', label: 'Assicurazione Auto', amount: 570, icon: '🛡️', colorName: 'blue', paidMonths: [], group: 'alternata' },
   { id: 'bollo-auto', label: 'Bollo Auto', amount: 150, icon: '🚗', colorName: 'red', paidMonths: [], group: 'alternata' },
-  // Rate AdE
   { id: 'ade-26-05', label: 'AdE Maggio 26', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-05-31' },
-  { id: 'ade-26-07', label: 'AdE Luglio 26', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-07-31' },
-  { id: 'ade-26-11', label: 'AdE Nov 26', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-11-30' },
-  { id: 'ade-27-02', label: 'AdE Feb 27', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-02-28' },
-  { id: 'ade-27-05', label: 'AdE Mag 27', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-05-31' },
-  { id: 'ade-27-07', label: 'AdE Lug 27', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-07-31' },
-  { id: 'ade-27-11', label: 'AdE Nov 27', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-11-30' },
 ];
 
 const DEFAULT_CATEGORIES: CategoryConfig[] = [
   { id: DefaultCategoryIds.KRISTIAN, label: 'Kristian', type: 'expense', icon: '👦', colorClass: 'bg-blue-500', colorName: 'blue' },
   { id: DefaultCategoryIds.MEGAN, label: 'Megan', type: 'expense', icon: '👧', colorClass: 'bg-pink-500', colorName: 'pink' },
   { id: DefaultCategoryIds.ZARA, label: 'Zara', type: 'expense', icon: '🐶', colorClass: 'bg-amber-600', colorName: 'amber' },
-  { id: DefaultCategoryIds.CASA, label: 'Casa', type: 'expense', icon: '🏠', colorClass: 'bg-purple-600', colorName: 'purple' },
+  { id: DefaultCategoryIds.CASA, label: 'Casa', type: 'expense', icon: 'purple-600', colorClass: 'bg-purple-600', colorName: 'purple' },
   { id: DefaultCategoryIds.MACCHINA, label: 'Macchina', type: 'expense', icon: '🚗', colorClass: 'bg-red-500', colorName: 'red' },
   { id: DefaultCategoryIds.SPESA, label: 'Spesa', type: 'expense', icon: '🛒', colorClass: 'bg-green-500', colorName: 'green' },
   { id: DefaultCategoryIds.USCITE_ALTRO, label: 'Altro', type: 'expense', icon: '💸', colorClass: 'bg-gray-500', colorName: 'gray' },
@@ -67,46 +61,46 @@ const DEFAULT_CATEGORIES: CategoryConfig[] = [
   { id: DefaultCategoryIds.LEZIONI, label: 'Lezioni', type: 'income', icon: '📚', colorClass: 'bg-teal-500', colorName: 'teal' },
 ];
 
-const COLORS = ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#6b7280'];
-const STORAGE_KEY = 'lillabudget_transactions';
-const FIXED_EXPENSES_KEY = 'lillabudget_fixed_expenses';
+const STORAGE_KEY = 'lillabudget_transactions_v2';
+const FIXED_EXPENSES_KEY = 'lillabudget_fixed_expenses_v2';
 
+// --- UI Constants and Helpers ---
+
+// Fix for error: Cannot find name 'COLORS'
+const COLORS = ['#8B5CF6', '#3B82F6', '#EC4899', '#F59E0B', '#EF4444', '#10B981', '#14B8A6', '#06B6D4', '#64748B'];
+
+// Fix for error: Cannot find name 'StatCard'
 const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: { 
-  title: string, 
-  amount: number, 
-  type: 'income' | 'expense' | 'total', 
-  isVisible: boolean, 
-  subtitle?: string, 
-  highlight?: boolean 
+  title: string; 
+  amount: number; 
+  type: 'income' | 'expense' | 'total'; 
+  isVisible: boolean;
+  subtitle?: string;
+  highlight?: boolean;
 }) => {
-  const formatted = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(amount);
-  let textColor = 'text-white';
-  let icon = null;
-  let bgGradient = 'from-slate-800 to-slate-900';
-  let borderColor = 'border-white/10';
-
-  if (type === 'income') { 
-    textColor = 'text-emerald-400'; 
-    icon = <TrendingUp className="text-emerald-500" size={20} />; 
-    bgGradient = 'from-emerald-900/10 to-slate-900'; 
-    borderColor = 'border-emerald-500/20'; 
-  } else if (type === 'expense') { 
-    textColor = 'text-rose-400'; 
-    icon = <TrendingDown className="text-rose-500" size={20} />; 
-    bgGradient = 'from-rose-900/10 to-slate-900'; 
-    borderColor = 'border-rose-500/20'; 
-  } else if (type === 'total') { 
-    textColor = 'text-lilla-300'; 
-    bgGradient = highlight ? 'from-lilla-600/20 to-slate-900' : 'from-lilla-900/10 to-slate-900'; 
-    borderColor = highlight ? 'border-lilla-500/50' : 'border-lilla-500/20'; 
-  }
-
   return (
-    <div className={`bg-gradient-to-br ${bgGradient} backdrop-blur-md border ${borderColor} rounded-2xl p-5 flex flex-col items-center justify-center shadow-lg relative overflow-hidden transition-all ${highlight ? 'ring-1 ring-lilla-500/20 shadow-lilla-500/10' : ''}`}>
-      <div className="absolute top-0 right-0 p-3 opacity-20">{icon}</div>
-      <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-1">{title}</span>
-      <span className={`text-xl md:text-2xl font-black ${textColor} drop-shadow-sm`}>{isVisible ? formatted : '••••••'}</span>
-      {subtitle && <span className="text-[10px] text-gray-500 mt-1 uppercase font-bold text-center leading-tight">{subtitle}</span>}
+    <div className={`
+      relative overflow-hidden p-6 rounded-3xl border transition-all duration-300
+      ${highlight ? 'bg-gradient-to-br from-lilla-600/20 to-purple-600/10 border-lilla-500/30 shadow-lg' : 'bg-[#1a1625] border-white/5 shadow-xl'}
+    `}>
+      <div className="flex flex-col relative z-10">
+        <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">{title}</span>
+        <div className="flex items-baseline gap-1">
+          <span className={`text-2xl font-black ${
+            type === 'income' ? 'text-emerald-400' : 
+            type === 'expense' ? 'text-rose-400' : 
+            amount < 0 ? 'text-rose-400' : 'text-white'
+          }`}>
+            {isVisible ? `${amount.toFixed(2)}€` : '****'}
+          </span>
+        </div>
+        {subtitle && <span className="text-[10px] text-gray-500 font-bold mt-1 uppercase">{subtitle}</span>}
+      </div>
+      {highlight && (
+        <div className="absolute -right-4 -bottom-4 opacity-[0.03]">
+          <TrendingUp size={100} />
+        </div>
+      )}
     </div>
   );
 };
@@ -117,6 +111,7 @@ export default function App() {
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>(DEFAULT_FIXED_EXPENSES);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dbStatus, setDbStatus] = useState<'connected' | 'syncing' | 'error' | 'idle'>('idle');
+  const [isLoading, setIsLoading] = useState(true);
 
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<CategoryConfig | null>(null);
@@ -129,6 +124,34 @@ export default function App() {
   const [fixedToDelete, setFixedToDelete] = useState<string | null>(null);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
 
+  // Forza il caricamento sicuro
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setIsLoading(true);
+      try {
+        const localTx = localStorage.getItem(STORAGE_KEY);
+        const localFx = localStorage.getItem(FIXED_EXPENSES_KEY);
+        
+        if (localTx) {
+          const parsed = JSON.parse(localTx);
+          if (Array.isArray(parsed)) setTransactions(parsed);
+        }
+        
+        if (localFx) {
+          const parsed = JSON.parse(localFx);
+          if (Array.isArray(parsed) && parsed.length > 0) setFixedExpenses(parsed);
+        }
+        
+        await syncWithCloud();
+      } catch (e) {
+        console.error("Errore caricamento iniziale:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadInitialData();
+  }, []);
+
   const syncWithCloud = async () => {
     if (!process.env.DATABASE_URL) {
       setDbStatus('error');
@@ -139,38 +162,25 @@ export default function App() {
       await initDb();
       const cloudData = await fetchAllData();
       if (cloudData) {
-        if (cloudData.transactions) setTransactions(cloudData.transactions);
-        if (cloudData.fixedExpenses && cloudData.fixedExpenses.length > 0) {
-           setFixedExpenses(cloudData.fixedExpenses);
+        if (Array.isArray(cloudData.transactions)) {
+          setTransactions(cloudData.transactions);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudData.transactions));
+        }
+        if (Array.isArray(cloudData.fixedExpenses) && cloudData.fixedExpenses.length > 0) {
+          setFixedExpenses(cloudData.fixedExpenses);
+          localStorage.setItem(FIXED_EXPENSES_KEY, JSON.stringify(cloudData.fixedExpenses));
         }
         setDbStatus('connected');
       }
     } catch (err) {
-      console.error("Errore critico durante syncWithCloud:", err);
+      console.error("Errore sincronizzazione cloud:", err);
       setDbStatus('error');
-      // Non blocchiamo l'app, rimaniamo con i dati locali
     }
   };
 
-  useEffect(() => {
-    try {
-      const localTx = localStorage.getItem(STORAGE_KEY);
-      const localFx = localStorage.getItem(FIXED_EXPENSES_KEY);
-      if (localTx) setTransactions(JSON.parse(localTx));
-      if (localFx) {
-         const parsed = JSON.parse(localFx);
-         if (parsed && Array.isArray(parsed) && parsed.length > 0) setFixedExpenses(parsed);
-      }
-    } catch (e) {
-      console.warn("Errore lettura localStorage:", e);
-    }
-    syncWithCloud();
-  }, []);
-
-  useEffect(() => {
-    if (transactions.length > 0) localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
-    if (fixedExpenses.length > 0) localStorage.setItem(FIXED_EXPENSES_KEY, JSON.stringify(fixedExpenses));
-  }, [transactions, fixedExpenses]);
+  // Memoizzazione sicura per prevenire crash se i dati non sono array
+  const safeTransactions = useMemo(() => Array.isArray(transactions) ? transactions : [], [transactions]);
+  const safeFixedExpenses = useMemo(() => Array.isArray(fixedExpenses) ? fixedExpenses : [], [fixedExpenses]);
 
   const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
   const getMonthName = (d: Date) => new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' }).format(d);
@@ -195,7 +205,9 @@ export default function App() {
       date: new Date(date).toISOString()
     };
 
-    setTransactions(prev => [newTx, ...prev]);
+    const updated = [newTx, ...safeTransactions];
+    setTransactions(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     setTxModalOpen(false);
     setAmount('');
     setDescription('');
@@ -206,34 +218,37 @@ export default function App() {
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
+    const updated = safeTransactions.filter(t => t.id !== id);
+    setTransactions(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     setDbStatus('syncing');
     await deleteTransactionDb(id);
     setDbStatus('connected');
   };
 
   const togglePaidFixed = async (id: string) => {
-    const expense = fixedExpenses.find(fe => fe.id === id);
+    const expense = safeFixedExpenses.find(fe => fe.id === id);
     if (!expense) return;
 
     const isCurrentlyPaid = expense.paidMonths.includes(currentMonthKey);
     const transactionId = `pay-${id}-${currentMonthKey}`;
     
     let updatedExpense: FixedExpense | null = null;
-    setFixedExpenses(prev => {
-      return prev.map(fe => {
-        if (fe.id === id) {
-          updatedExpense = { 
-            ...fe, 
-            paidMonths: isCurrentlyPaid 
-              ? fe.paidMonths.filter(m => m !== currentMonthKey) 
-              : [...fe.paidMonths, currentMonthKey] 
-          };
-          return updatedExpense;
-        } 
-        return fe;
-      });
+    const newFixed = safeFixedExpenses.map(fe => {
+      if (fe.id === id) {
+        updatedExpense = { 
+          ...fe, 
+          paidMonths: isCurrentlyPaid 
+            ? fe.paidMonths.filter(m => m !== currentMonthKey) 
+            : [...fe.paidMonths, currentMonthKey] 
+        };
+        return updatedExpense;
+      } 
+      return fe;
     });
+
+    setFixedExpenses(newFixed);
+    localStorage.setItem(FIXED_EXPENSES_KEY, JSON.stringify(newFixed));
 
     setDbStatus('syncing');
     try {
@@ -246,61 +261,60 @@ export default function App() {
           description: `Pagamento ${expense.label}`,
           date: new Date().toISOString()
         };
-        setTransactions(prev => [newTx, ...prev]);
+        const updatedTxs = [newTx, ...safeTransactions];
+        setTransactions(updatedTxs);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTxs));
         await saveTransactionDb(newTx);
       } else {
-        setTransactions(prev => prev.filter(t => t.id !== transactionId));
+        const updatedTxs = safeTransactions.filter(t => t.id !== transactionId);
+        setTransactions(updatedTxs);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTxs));
         await deleteTransactionDb(transactionId);
       }
       if (updatedExpense) await saveFixedExpenseDb(updatedExpense);
       setDbStatus('connected');
     } catch (err) {
-      console.error("Errore durante togglePaidFixed:", err);
+      console.error("Errore togglePaidFixed:", err);
       setDbStatus('error');
     }
   };
 
   const notifications = useMemo(() => {
-    const alerts: { id: string, title: string, text: string, type: 'critical' | 'warning' | 'info', expenseId: string }[] = [];
+    const alerts: any[] = [];
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setHours(0,0,0,0);
 
-    fixedExpenses.forEach(fe => {
+    safeFixedExpenses.forEach(fe => {
       const isPaid = fe.paidMonths.includes(currentMonthKey);
       if (fe.dueDate) {
         const dDate = new Date(fe.dueDate);
-        dDate.setHours(0, 0, 0, 0);
+        dDate.setHours(0,0,0,0);
         const diffDays = Math.ceil((dDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         if (!isPaid) {
-          if (diffDays < 0) {
-            alerts.push({ id: `alert-${fe.id}`, title: 'SCADUTO!', text: `${fe.label} del ${fe.dueDate.split('-').reverse().join('/')} non risulta pagato!`, type: 'critical', expenseId: fe.id });
-          } else if (diffDays <= 7) {
-            alerts.push({ id: `alert-${fe.id}`, title: 'SCADENZA VICINA', text: `${fe.label} scade tra ${diffDays === 0 ? 'oggi' : diffDays + ' giorni'} (${fe.dueDate.split('-').reverse().join('/')})`, type: 'warning', expenseId: fe.id });
-          }
+          if (diffDays < 0) alerts.push({ id: `a-${fe.id}`, title: 'SCADUTO', text: `${fe.label} non pagato!`, type: 'critical' });
+          else if (diffDays <= 7) alerts.push({ id: `a-${fe.id}`, title: 'SCADENZA', text: `${fe.label} scade tra ${diffDays}gg`, type: 'warning' });
         }
-      } else if (!isPaid && fe.group === 'mensile' && today.getDate() > 10) {
-        alerts.push({ id: `remind-${fe.id}`, title: 'PROMEMORIA', text: `Non hai ancora registrato il pagamento di ${fe.label} questo mese.`, type: 'info', expenseId: fe.id });
       }
     });
     return alerts;
-  }, [fixedExpenses, currentMonthKey]);
+  }, [safeFixedExpenses, currentMonthKey]);
 
   const residue = useMemo(() => {
     const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    return transactions
+    return safeTransactions
       .filter(t => new Date(t.date) < start)
       .reduce((acc, t) => t.type === 'income' ? acc + t.amount : acc - t.amount, 0);
-  }, [transactions, currentDate]);
+  }, [safeTransactions, currentDate]);
 
   const monthlyTrans = useMemo(() => {
-    return transactions.filter(t => {
+    return safeTransactions.filter(t => {
       const d = new Date(t.date); 
       return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
     }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [transactions, currentDate]);
+  }, [safeTransactions, currentDate]);
 
-  const monthlyInc = monthlyTrans.filter(t => t.type === 'income').reduce((a, b) => a + b.amount, 0);
-  const monthlyExp = monthlyTrans.filter(t => t.type === 'expense').reduce((a, b) => a + b.amount, 0);
+  const monthlyExp = useMemo(() => monthlyTrans.filter(t => t.type === 'expense').reduce((a, b) => a + b.amount, 0), [monthlyTrans]);
+  const monthlyInc = useMemo(() => monthlyTrans.filter(t => t.type === 'income').reduce((a, b) => a + b.amount, 0), [monthlyTrans]);
   const totalAvail = residue + monthlyInc;
   const currentBal = totalAvail - monthlyExp;
 
@@ -316,166 +330,18 @@ export default function App() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [monthlyTrans]);
 
-  const monthlyData = [
-    { name: 'Disponibile', amount: totalAvail },
-    { name: 'Speso', amount: monthlyExp }
-  ];
-
-  const visibleFixed = fixedExpenses.filter(fe => {
-    if (!fe.dueDate) return true;
-    const [y, m] = fe.dueDate.split('-').map(Number);
-    return y === currentDate.getFullYear() && (m - 1) === currentDate.getMonth();
-  });
-
-  const renderHome = () => (
-    <div className="space-y-8 animate-in fade-in pb-10">
-      <div className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 shadow-lg mx-1">
-        <button onClick={() => changeMonth(-1)} className="p-2 text-lilla-400 hover:text-white transition-colors">
-          <ChevronLeft size={24} />
-        </button>
-        <div className="flex flex-col items-center text-center">
-          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Mese in Gestione</span>
-          <span className="text-lg font-black text-white capitalize leading-none">{getMonthName(currentDate)}</span>
-        </div>
-        <button onClick={() => changeMonth(1)} className="p-2 text-lilla-400 hover:text-white transition-colors">
-          <ChevronRight size={24} />
-        </button>
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-darksoft flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="text-lilla-500 animate-spin" size={48} />
+        <p className="text-lilla-200 font-black uppercase text-xs tracking-widest animate-pulse">Sincronizzazione Cloud...</p>
       </div>
-
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard title="Entrate + Residuo" amount={totalAvail} type="income" isVisible={true} subtitle={`Residuo: ${residue.toFixed(2)}€`} />
-        <StatCard title="Uscite Totali" amount={monthlyExp} type="expense" isVisible={true} subtitle="Fisse + Extra" />
-        <StatCard title="Budget Attuale" amount={currentBal} type="total" isVisible={true} highlight subtitle="Soldi rimasti oggi" />
-      </section>
-
-      <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-        <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
-           <CheckCircle2 className="text-lilla-400" size={20}/> Monitor Fisse & Scadenze
-        </h2>
-        
-        <div className="space-y-8">
-          <div>
-            <span className="text-[10px] font-black uppercase text-lilla-400 tracking-widest border-b border-white/5 block mb-4 pb-1">Uscite Ricorrenti</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {visibleFixed.filter(f => f.group === 'mensile').map(fe => {
-                const p = fe.paidMonths.includes(currentMonthKey);
-                return (
-                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40 shadow-inner' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xl">{fe.icon}</span>
-                      <div className="text-left">
-                        <p className={`font-bold text-xs truncate ${p ? 'text-emerald-300' : 'text-gray-200'}`}>{fe.label}</p>
-                        <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
-                      </div>
-                    </div>
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${p ? 'bg-emerald-500 text-white' : 'bg-white/10 text-gray-600'}`}>
-                      {p && <Check size={12} strokeWidth={4} />}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest border-b border-white/5 block mb-4 pb-1">Straordinarie & AdE</span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {visibleFixed.filter(f => f.group !== 'mensile').map(fe => {
-                const p = fe.paidMonths.includes(currentMonthKey);
-                const isFiscal = !!fe.dueDate;
-                return (
-                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${isFiscal ? (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-rose-600/10 border-rose-500/60 shadow-lg shadow-rose-500/10') : (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}>
-                    {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-rose-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Rata</span>}
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xl">{fe.icon}</span>
-                      <div className="text-left">
-                          <p className={`font-bold text-xs truncate ${p ? 'text-emerald-300' : (isFiscal ? 'text-rose-400' : 'text-gray-200')}`}>{fe.label}</p>
-                          <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
-                      </div>
-                    </div>
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${p ? 'bg-emerald-500 text-white' : 'bg-white/10'}`}>
-                      {p && <Check size={12} strokeWidth={4} />}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-        <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
-           <List className="text-lilla-400" size={20}/> Registro Movimenti
-        </h2>
-        <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10">
-              <tr>
-                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Data</th>
-                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Operazione</th>
-                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Importo</th>
-                <th className="py-3 px-4 w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {monthlyTrans.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="py-12 text-center text-gray-500 italic font-medium">Nessuna operazione registrata.</td>
-                </tr>
-              ) : (
-                monthlyTrans.map(tx => {
-                  const cat = DEFAULT_CATEGORIES.find(c => c.id === tx.category);
-                  const isFixedPay = tx.id.startsWith('pay-');
-                  return (
-                    <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
-                      <td className="py-4 px-4 text-xs font-bold text-gray-400">
-                        {new Date(tx.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{cat?.icon || (isFixedPay ? '✅' : '💰')}</span>
-                          <div className="flex flex-col">
-                             <span className="font-bold text-gray-200 truncate max-w-[120px] md:max-w-none">{cat?.label || tx.category}</span>
-                             {isFixedPay && <span className="text-[9px] text-emerald-500 uppercase font-black">Spesa Fissa</span>}
-                          </div>
-                        </div>
-                      </td>
-                      <td className={`py-4 px-4 text-right font-black ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {tx.type === 'income' ? '+' : '-'}{tx.amount.toFixed(2)}€
-                      </td>
-                      <td className="py-4 px-4 text-right">
-                        <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 text-gray-600 hover:text-rose-500 transition-all transform hover:scale-110">
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="space-y-6">
-          <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black mb-4 flex items-center gap-3">
-            <ArrowDownCircle className="text-rose-400" /> Aggiungi Movimento Extra
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-              {DEFAULT_CATEGORIES.map(cat => (
-                <NeonButton key={cat.id} onClick={() => { setSelectedCategory(cat); setTxModalOpen(true); }} color={cat.colorName} square>
-                  <span className="text-4xl">{cat.icon}</span>
-                  <span className="text-xs font-bold mt-2 uppercase">{cat.label}</span>
-                </NeonButton>
-              ))}
-          </div>
-      </section>
-    </div>
-  );
+    );
+  }
 
   return (
     <div className="min-h-screen bg-darksoft text-gray-100 font-sans pb-10 relative overflow-x-hidden">
+       {/* Background decorative elements */}
        <div className="fixed inset-0 pointer-events-none z-0">
          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"></div>
          <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-lilla-600/5 rounded-full blur-[140px]"></div>
@@ -539,12 +405,9 @@ export default function App() {
                       </div>
                     ) : (
                       notifications.map(n => (
-                        <div key={n.id} className={`p-3 rounded-xl border flex gap-3 items-start transition-all hover:translate-x-1 ${n.type === 'critical' ? 'bg-rose-500/10 border-rose-500/30' : n.type === 'warning' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-lilla-500/10 border-lilla-500/30'}`}>
-                           <div className="mt-0.5">
-                             {n.type === 'critical' ? <AlertTriangle className="text-rose-500" size={14} /> : n.type === 'warning' ? <AlertCircle className="text-amber-500" size={14} /> : <Info className="text-lilla-400" size={14} />}
-                           </div>
+                        <div key={n.id} className={`p-3 rounded-xl border flex gap-3 items-start ${n.type === 'critical' ? 'bg-rose-500/10 border-rose-500/30' : 'bg-amber-500/10 border-amber-500/30'}`}>
                            <div>
-                             <p className={`text-[10px] font-black uppercase leading-none mb-1 ${n.type === 'critical' ? 'text-rose-400' : n.type === 'warning' ? 'text-amber-400' : 'text-lilla-300'}`}>{n.title}</p>
+                             <p className={`text-[10px] font-black uppercase leading-none mb-1 ${n.type === 'critical' ? 'text-rose-400' : 'text-amber-400'}`}>{n.title}</p>
                              <p className="text-[11px] font-bold text-gray-300 leading-tight">{n.text}</p>
                            </div>
                         </div>
@@ -556,144 +419,164 @@ export default function App() {
           )}
 
           <main className="max-w-5xl mx-auto">
-            {view === 'home' && renderHome()}
-            {view === 'reports' && (
-              <div className="space-y-8 animate-in slide-in-from-right px-1">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
-                      <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Spese per Voce</h3>
-                      <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={expensesByCategory} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                              {expensesByCategory.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
-                            </Pie>
-                            <Tooltip contentStyle={{ backgroundColor: '#1a1625', border: '1px solid #ffffff10', borderRadius: '12px', fontSize: '12px' }} />
-                            <Legend />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                    <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
-                      <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Riepilogo Disponibilità</h3>
-                      <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={monthlyData}>
-                            <CartesianGrid stroke="#ffffff05" vertical={false}/>
-                            <XAxis dataKey="name" stroke="#a78bfa" fontSize={10} axisLine={false} tickLine={false}/>
-                            <YAxis stroke="#a78bfa" fontSize={10} axisLine={false} tickLine={false}/>
-                            <Tooltip cursor={{fill: '#ffffff05'}} contentStyle={{ backgroundColor: '#1a1625', border: '1px solid #ffffff10', borderRadius: '12px' }} />
-                            <Bar dataKey="amount" radius={[8, 8, 0, 0]}>
-                              {monthlyData.map((e, i) => <Cell key={`bar-${i}`} fill={e.name === 'Disponibile' ? '#10b981' : '#f43f5e'} />)}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
+            {view === 'home' && (
+              <div className="space-y-8 animate-in fade-in pb-10">
+                <div className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 shadow-lg mx-1">
+                  <button onClick={() => changeMonth(-1)} className="p-2 text-lilla-400 hover:text-white transition-colors"><ChevronLeft size={24} /></button>
+                  <div className="flex flex-col items-center text-center">
+                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Mese</span>
+                    <span className="text-lg font-black text-white capitalize leading-none">{getMonthName(currentDate)}</span>
+                  </div>
+                  <button onClick={() => changeMonth(1)} className="p-2 text-lilla-400 hover:text-white transition-colors"><ChevronRight size={24} /></button>
                 </div>
-              </div>
-            )}
-            {view === 'settings' && (
-              <div className="space-y-8 max-w-2xl mx-auto pb-10 px-1">
-                <section className="bg-[#1a1625] rounded-3xl p-8 shadow-xl border border-white/5">
-                   <h2 className="text-xl font-black text-white mb-6 flex items-center gap-3 uppercase tracking-tight">
-                     <CreditCard className="text-blue-600" /> Piano Scadenze
-                   </h2>
-                   <div className="space-y-3">
-                      {fixedExpenses.sort((a,b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999')).map(fe => (
-                        <div key={fe.id} className="flex items-center justify-between bg-white/5 p-4 rounded-xl border border-white/5 transition-colors group">
-                          <div className="flex items-center gap-3">
-                            <span className="text-3xl">{fe.icon}</span>
-                            <div>
-                              <span className="font-black text-gray-100 block text-sm">
-                                  {fe.label} 
-                                  {fe.dueDate && <span className="text-[8px] bg-rose-600 text-white px-1.5 py-0.5 rounded-full uppercase ml-1">{fe.dueDate.split('-').reverse().join('/')}</span>}
-                              </span>
-                              <span className="text-[10px] text-gray-500 font-black uppercase">{fe.amount.toFixed(2)}€</span>
-                            </div>
-                          </div>
-                          <button onClick={() => { setFixedToDelete(fe.id); setDeleteFixedModalOpen(true); }} className="text-gray-500 hover:text-rose-500 p-2 transition-colors transform hover:scale-110">
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      ))}
-                   </div>
+
+                <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <StatCard title="Entrate + Residuo" amount={totalAvail} type="income" isVisible={true} subtitle={`Residuo: ${residue.toFixed(2)}€`} />
+                  <StatCard title="Uscite Totali" amount={monthlyExp} type="expense" isVisible={true} />
+                  <StatCard title="Budget Attuale" amount={currentBal} type="total" isVisible={true} highlight />
                 </section>
 
-                <section className="bg-rose-950/10 border border-rose-500/20 rounded-3xl p-8 shadow-xl text-center">
-                  <h2 className="text-lg font-black text-white mb-6 uppercase tracking-tight">Manutenzione Dati</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <button onClick={() => setResetModalOpen(true)} className="w-full bg-rose-600/20 border border-rose-500/30 text-rose-100 font-black py-4 rounded-xl uppercase text-xs hover:bg-rose-600/30 transition-all">Svuota Archivio</button>
-                      <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-white/5 border border-white/10 text-gray-400 font-black py-4 rounded-xl uppercase text-xs hover:bg-white/10 transition-all">Reset Cache</button>
+                <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                  <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
+                     <CheckCircle2 className="text-lilla-400" size={20}/> Monitor Fisse & Scadenze
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {safeFixedExpenses.filter(fe => !fe.dueDate || (new Date(fe.dueDate).getMonth() === currentDate.getMonth())).map(fe => {
+                      const p = fe.paidMonths.includes(currentMonthKey);
+                      return (
+                        <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10'}`}>
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-xl">{fe.icon}</span>
+                            <div className="text-left truncate">
+                              <p className={`font-bold text-xs truncate ${p ? 'text-emerald-300' : 'text-gray-200'}`}>{fe.label}</p>
+                              <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
+                            </div>
+                          </div>
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center ${p ? 'bg-emerald-500 text-white' : 'bg-white/10'}`}>
+                            {p && <Check size={12} strokeWidth={4} />}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
+                </section>
+
+                <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                  <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
+                     <List className="text-lilla-400" size={20}/> Registro Movimenti
+                  </h2>
+                  <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10">
+                        <tr>
+                          <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase">Data</th>
+                          <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase">Operazione</th>
+                          <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase text-right">Importo</th>
+                          <th className="py-3 px-4 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {monthlyTrans.map(tx => {
+                          const cat = DEFAULT_CATEGORIES.find(c => c.id === tx.category);
+                          return (
+                            <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
+                              <td className="py-4 px-4 text-xs font-bold text-gray-400">
+                                {new Date(tx.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                              </td>
+                              <td className="py-4 px-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-lg">{cat?.icon || '✅'}</span>
+                                  <span className="font-bold text-gray-200 truncate">{cat?.label || tx.category}</span>
+                                </div>
+                              </td>
+                              <td className={`py-4 px-4 text-right font-black ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {tx.type === 'income' ? '+' : '-'}{tx.amount.toFixed(2)}€
+                              </td>
+                              <td className="py-4 px-4 text-right">
+                                <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 text-gray-600 hover:text-rose-500"><Trash2 size={16} /></button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section className="space-y-6">
+                    <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black mb-4 flex items-center gap-3"><ArrowDownCircle className="text-rose-400" /> Movimento Extra</h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                        {DEFAULT_CATEGORIES.map(cat => (
+                          <NeonButton key={cat.id} onClick={() => { setSelectedCategory(cat); setTxModalOpen(true); }} color={cat.colorName} square>
+                            <span className="text-4xl">{cat.icon}</span>
+                            <span className="text-xs font-bold mt-2 uppercase">{cat.label}</span>
+                          </NeonButton>
+                        ))}
+                    </div>
+                </section>
+              </div>
+            )}
+            
+            {view === 'reports' && (
+              <div className="space-y-8 animate-in slide-in-from-right px-1">
+                 <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
+                    <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Spese per Voce</h3>
+                    <div className="h-64 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={expensesByCategory} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                            {expensesByCategory.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
+                          </Pie>
+                          <Tooltip contentStyle={{ backgroundColor: '#1a1625', border: '1px solid #ffffff10', borderRadius: '12px' }} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            {view === 'settings' && (
+              <div className="space-y-8 max-w-2xl mx-auto px-1">
+                <section className="bg-[#1a1625] rounded-3xl p-8 border border-white/5">
+                   <h2 className="text-xl font-black text-white mb-6 uppercase tracking-tight">Manutenzione Dati</h2>
+                   <div className="grid grid-cols-1 gap-4">
+                      <button onClick={() => setResetModalOpen(true)} className="w-full bg-rose-600/20 border border-rose-500/30 text-rose-100 font-black py-4 rounded-xl uppercase text-xs">Svuota Archivio</button>
+                      <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-white/5 border border-white/10 text-gray-400 font-black py-4 rounded-xl uppercase text-xs">Reset Cache</button>
+                   </div>
                 </section>
               </div>
             )}
           </main>
        </div>
 
+       {/* Modal Registrazione */}
        {txModalOpen && selectedCategory && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in">
-           <div className="bg-[#13111C] border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative animate-in zoom-in-95">
-             <button onClick={() => setTxModalOpen(false)} className="absolute top-5 right-5 text-gray-500 hover:text-white bg-white/5 p-2 rounded-full transition-colors"><X size={20} /></button>
+         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
+           <div className="bg-[#13111C] border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative">
+             <button onClick={() => setTxModalOpen(false)} className="absolute top-5 right-5 text-gray-500"><X size={20} /></button>
              <div className="text-center mb-8">
-                <div className={`w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-5xl mb-4 shadow-xl ${selectedCategory.colorClass} text-white`}>{selectedCategory.icon}</div>
+                <div className={`w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-5xl mb-4 ${selectedCategory.colorClass} text-white`}>{selectedCategory.icon}</div>
                 <h2 className="text-2xl font-black text-white uppercase tracking-tight">Registra {selectedCategory.label}</h2>
              </div>
              <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Data</label>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Importo (€)</label>
-                  <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-white focus:outline-none text-center focus:ring-2 focus:ring-lilla-500/20" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Nota</label>
-                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Opzionale..." className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
-                </div>
-                <div className="pt-6">
-                  <NeonButton onClick={handleSaveTransaction} fullWidth color={selectedCategory.colorName}>Conferma</NeonButton>
-                </div>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold" />
+                <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Importo €" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-white text-center" />
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Nota..." className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold" />
+                <NeonButton onClick={handleSaveTransaction} fullWidth color={selectedCategory.colorName}>Conferma</NeonButton>
              </div>
            </div>
          </div>
        )}
 
        {resetModalOpen && (
-         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-in fade-in">
-            <div className="bg-rose-950/20 border border-rose-500/40 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl text-center">
-                <div className="bg-rose-600 p-6 rounded-full text-white mx-auto mb-8 w-fit animate-pulse"><AlertTriangle size={48} /></div>
-                <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">RESET COMPLETO?</h3>
-                <p className="text-rose-200/60 text-sm mb-10">L'operazione cancellerà tutti i dati in locale e cloud.</p>
+         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl">
+            <div className="bg-rose-950/20 border border-rose-500/40 w-full max-w-md rounded-[2.5rem] p-10 text-center">
+                <AlertTriangle className="text-rose-600 mx-auto mb-8" size={64} />
+                <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">CANCELLARE TUTTO?</h3>
                 <div className="flex flex-col gap-3">
-                  <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 py-5 rounded-2xl font-black uppercase text-xs transition-all">Annulla</button>
-                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-rose-600 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-rose-600/30 transition-all">Conferma Reset</button>
-                </div>
-            </div>
-         </div>
-       )}
-
-       {deleteFixedModalOpen && (
-         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
-            <div className="bg-[#13111C] border border-white/10 w-full max-w-sm rounded-[2rem] p-8 shadow-2xl text-center">
-                <div className="bg-rose-500/20 p-5 rounded-full text-rose-500 mx-auto mb-6 w-fit"><AlertTriangle size={40} /></div>
-                <h3 className="text-2xl font-black text-white mb-2 uppercase tracking-tighter">Eliminare Voce?</h3>
-                <p className="text-gray-500 text-sm mb-8 font-medium italic leading-tight">Verrà rimossa definitivamente dal piano spese.</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <button onClick={() => setDeleteFixedModalOpen(false)} className="bg-white/5 py-4 rounded-2xl font-black uppercase text-xs tracking-widest transition-all">No</button>
-                  <button 
-                    onClick={async () => {
-                      if (fixedToDelete) {
-                        setFixedExpenses(prev => prev.filter(f => f.id !== fixedToDelete));
-                        await deleteFixedExpenseDb(fixedToDelete);
-                        setDeleteFixedModalOpen(false);
-                        setFixedToDelete(null);
-                      }
-                    }} 
-                    className="bg-rose-600 py-4 rounded-2xl font-black uppercase text-xs tracking-widest text-white shadow-lg shadow-rose-600/20 transition-all"
-                  >Sì, Elimina</button>
+                  <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 py-5 rounded-2xl font-black uppercase text-xs">Annulla</button>
+                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-rose-600 py-5 rounded-2xl font-black uppercase text-xs text-white">Conferma Reset</button>
                 </div>
             </div>
          </div>

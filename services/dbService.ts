@@ -7,7 +7,7 @@ const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
 export const initDb = async () => {
   if (!sql) return;
   try {
-    // Cambiato ID in TEXT per supportare sia UUID che stringhe custom come "pay-mutuo-..."
+    // Usiamo TEXT per ID per supportare ID deterministici (es. pay-mutuo-...)
     await sql`
       CREATE TABLE IF NOT EXISTS transactions (
         id TEXT PRIMARY KEY,
@@ -38,25 +38,32 @@ export const initDb = async () => {
 export const fetchAllData = async () => {
   if (!sql) return null;
   try {
-    const txs = await sql`SELECT * FROM transactions ORDER BY date DESC`;
+    const txs = await sql`SELECT * FROM transactions ORDER BY date DESC LIMIT 1000`;
     const fxs = await sql`SELECT * FROM fixed_expenses`;
     
     return {
       transactions: (txs || []).map(t => ({
-        ...t,
+        id: String(t.id),
+        type: t.type as any,
+        category: String(t.category),
         amount: t.amount ? parseFloat(t.amount.toString()) : 0,
+        description: t.description || '',
         date: t.date ? new Date(t.date).toISOString() : new Date().toISOString()
       })) as Transaction[],
       fixedExpenses: (fxs || []).map(f => ({
-        ...f,
+        id: String(f.id),
+        label: String(f.label),
         amount: f.amount ? parseFloat(f.amount.toString()) : 0,
-        group: f.group_type,
+        icon: f.icon || '💰',
+        colorName: f.color_name as any,
+        paidMonths: Array.isArray(f.paid_months) ? f.paid_months : [],
+        group: f.group_type as any,
         dueDate: f.due_date ? new Date(f.due_date).toISOString().split('T')[0] : undefined
       })) as FixedExpense[]
     };
   } catch (err) {
-    console.error("Errore fetching dati:", err);
-    throw err; // Rilanciamo per permettere all'app di gestire l'errore
+    console.error("Errore fetchAllData:", err);
+    return null;
   }
 };
 
@@ -74,7 +81,7 @@ export const saveTransactionDb = async (t: Transaction) => {
         date = EXCLUDED.date
     `;
   } catch (err) {
-    console.error("Errore salvataggio transazione:", err);
+    console.error("Errore saveTransactionDb:", err);
   }
 };
 
@@ -94,7 +101,7 @@ export const saveFixedExpenseDb = async (f: FixedExpense) => {
         due_date = EXCLUDED.due_date
     `;
   } catch (err) {
-    console.error("Errore salvataggio spesa fissa:", err);
+    console.error("Errore saveFixedExpenseDb:", err);
   }
 };
 
@@ -103,7 +110,7 @@ export const deleteTransactionDb = async (id: string) => {
   try {
     await sql`DELETE FROM transactions WHERE id = ${id}`;
   } catch (err) {
-    console.error("Errore eliminazione transazione:", err);
+    console.error("Errore deleteTransactionDb:", err);
   }
 };
 
@@ -112,6 +119,6 @@ export const deleteFixedExpenseDb = async (id: string) => {
   try {
     await sql`DELETE FROM fixed_expenses WHERE id = ${id}`;
   } catch (err) {
-    console.error("Errore eliminazione spesa fissa:", err);
+    console.error("Errore deleteFixedExpenseDb:", err);
   }
 };
