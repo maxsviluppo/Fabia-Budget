@@ -128,7 +128,30 @@ export default function App() {
   const [deleteFixedModalOpen, setDeleteFixedModalOpen] = useState(false);
   const [fixedToDelete, setFixedToDelete] = useState<string | null>(null);
 
-  // --- Inizializzazione e Sincronizzazione Cloud ---
+  // --- Funzione di Sincronizzazione Cloud ---
+  const syncWithCloud = async () => {
+    if (!process.env.DATABASE_URL) {
+      setDbStatus('error');
+      return;
+    }
+
+    setDbStatus('syncing');
+    try {
+      await initDb();
+      const cloudData = await fetchAllData();
+      if (cloudData) {
+        setTransactions(cloudData.transactions);
+        setFixedExpenses(cloudData.fixedExpenses);
+        setDbStatus('connected');
+      } else {
+        setDbStatus('error');
+      }
+    } catch (err) {
+      setDbStatus('error');
+    }
+  };
+
+  // --- Inizializzazione ---
   useEffect(() => {
     const loadInitialData = async () => {
       const sTx = localStorage.getItem(STORAGE_KEY);
@@ -136,18 +159,7 @@ export default function App() {
       if (sTx) setTransactions(JSON.parse(sTx));
       if (sFx) setFixedExpenses(JSON.parse(sFx));
 
-      if (process.env.DATABASE_URL) {
-        setDbStatus('syncing');
-        await initDb();
-        const cloudData = await fetchAllData();
-        if (cloudData) {
-          setTransactions(cloudData.transactions);
-          setFixedExpenses(cloudData.fixedExpenses);
-          setDbStatus('connected');
-        } else {
-          setDbStatus('error');
-        }
-      }
+      await syncWithCloud();
     };
 
     loadInitialData();
@@ -203,19 +215,22 @@ export default function App() {
   const togglePaidFixed = async (id: string) => {
     let updatedExpense: FixedExpense | null = null;
 
-    setFixedExpenses(prev => prev.map(fe => {
-      if (fe.id === id) {
-        const isPaid = fe.paidMonths.includes(currentMonthKey);
-        updatedExpense = { 
-          ...fe, 
-          paidMonths: isPaid 
-            ? fe.paidMonths.filter(m => m !== currentMonthKey) 
-            : [...fe.paidMonths, currentMonthKey] 
-        };
-        return updatedExpense;
-      } 
-      return fe;
-    }));
+    setFixedExpenses(prev => {
+      const updated = prev.map(fe => {
+        if (fe.id === id) {
+          const isPaid = fe.paidMonths.includes(currentMonthKey);
+          updatedExpense = { 
+            ...fe, 
+            paidMonths: isPaid 
+              ? fe.paidMonths.filter(m => m !== currentMonthKey) 
+              : [...fe.paidMonths, currentMonthKey] 
+          };
+          return updatedExpense;
+        } 
+        return fe;
+      });
+      return updated;
+    });
 
     if (updatedExpense) {
       setDbStatus('syncing');
@@ -290,14 +305,14 @@ export default function App() {
   const renderHome = () => (
     <div className="space-y-8 animate-in fade-in pb-10">
       <div className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 shadow-lg mx-1">
-        <button onClick={() => changeMonth(-1)} className="p-2 text-lilla-400 hover:text-white">
+        <button onClick={() => changeMonth(-1)} className="p-2 text-lilla-400 hover:text-white transition-colors">
           <ChevronLeft size={24} />
         </button>
         <div className="flex flex-col items-center">
           <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Periodo Gestione</span>
           <span className="text-lg font-black text-white capitalize">{getMonthName(currentDate)}</span>
         </div>
-        <button onClick={() => changeMonth(1)} className="p-2 text-lilla-400 hover:text-white">
+        <button onClick={() => changeMonth(1)} className="p-2 text-lilla-400 hover:text-white transition-colors">
           <ChevronRight size={24} />
         </button>
       </div>
@@ -383,14 +398,14 @@ export default function App() {
       </section>
 
       {/* REGISTRO PRIMA NOTA */}
-      <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative">
+      <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
            <List className="text-lilla-400" size={20}/> Prima Nota (Movimenti)
         </h2>
         
-        <div className="overflow-x-auto custom-scrollbar max-h-96">
+        <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
           <table className="w-full text-left text-sm border-collapse">
-            <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10">
+            <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10 shadow-sm">
               <tr>
                 <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Data</th>
                 <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Categoria</th>
@@ -402,7 +417,7 @@ export default function App() {
             <tbody className="divide-y divide-white/5">
               {monthlyTrans.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-10 text-center text-gray-500 italic font-medium">Nessun movimento registrato questo mese.</td>
+                  <td colSpan={5} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento registrato questo mese.</td>
                 </tr>
               ) : (
                 monthlyTrans.map(tx => {
@@ -418,7 +433,7 @@ export default function App() {
                           <span className="font-bold text-gray-200">{cat?.label || tx.category}</span>
                         </div>
                       </td>
-                      <td className="py-4 px-4 text-xs text-gray-400 italic max-w-[200px] truncate">
+                      <td className="py-4 px-4 text-xs text-gray-400 italic max-w-[150px] md:max-w-none truncate">
                         {tx.description || '-'}
                       </td>
                       <td className={`py-4 px-4 text-right font-black ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -427,7 +442,8 @@ export default function App() {
                       <td className="py-4 px-4 text-right">
                         <button 
                           onClick={() => handleDeleteTransaction(tx.id)}
-                          className="p-2 text-gray-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
+                          className="p-2 text-gray-600 hover:text-rose-500 md:opacity-0 group-hover:opacity-100 transition-all transform hover:scale-110"
+                          title="Elimina movimento"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -468,7 +484,7 @@ export default function App() {
                   <Pie data={expensesByCategory} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                     {expensesByCategory.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip contentStyle={{ backgroundColor: '#1a1625', border: '1px solid #ffffff10', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold' }} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -480,9 +496,9 @@ export default function App() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData}>
                   <CartesianGrid stroke="#ffffff05" vertical={false}/>
-                  <XAxis dataKey="name" stroke="#a78bfa" fontSize={10}/>
-                  <YAxis stroke="#a78bfa" fontSize={10}/>
-                  <Tooltip/>
+                  <XAxis dataKey="name" stroke="#a78bfa" fontSize={10} axisLine={false} tickLine={false}/>
+                  <YAxis stroke="#a78bfa" fontSize={10} axisLine={false} tickLine={false}/>
+                  <Tooltip cursor={{fill: '#ffffff05'}} contentStyle={{ backgroundColor: '#1a1625', border: '1px solid #ffffff10', borderRadius: '12px' }} />
                   <Bar dataKey="amount" radius={[8, 8, 0, 0]}>
                     {monthlyData.map((e, i) => <Cell key={`bar-${i}`} fill={e.name === 'Disponibile' ? '#10b981' : '#f43f5e'} />)}
                   </Bar>
@@ -513,7 +529,7 @@ export default function App() {
                     <span className="text-[10px] text-gray-500 font-black uppercase">{fe.amount.toFixed(2)}€</span>
                   </div>
                 </div>
-                <button onClick={() => { setFixedToDelete(fe.id); setDeleteFixedModalOpen(true); }} className="text-gray-500 hover:text-rose-500 p-2 transition-colors">
+                <button onClick={() => { setFixedToDelete(fe.id); setDeleteFixedModalOpen(true); }} className="text-gray-500 hover:text-rose-500 p-2 transition-colors transform hover:scale-110">
                   <Trash2 size={18} />
                 </button>
               </div>
@@ -523,9 +539,9 @@ export default function App() {
 
       <section className="bg-red-950/10 border border-red-500/20 rounded-3xl p-8 shadow-xl text-center">
         <h2 className="text-lg font-black text-white mb-6 uppercase tracking-tight">Manutenzione Dati</h2>
-        <div className="grid grid-cols-2 gap-4">
-            <button onClick={() => setResetModalOpen(true)} className="w-full bg-red-600/20 border border-red-500/30 text-red-100 font-black py-4 rounded-xl uppercase text-xs">Reset App</button>
-            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-white/5 border border-white/10 text-gray-400 font-black py-4 rounded-xl uppercase text-xs">Svuota Cache</button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button onClick={() => setResetModalOpen(true)} className="w-full bg-red-600/20 border border-red-500/30 text-red-100 font-black py-4 rounded-xl uppercase text-xs hover:bg-red-600/30 transition-all">Reset App</button>
+            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-white/5 border border-white/10 text-gray-400 font-black py-4 rounded-xl uppercase text-xs hover:bg-white/10 transition-all">Svuota Cache</button>
         </div>
       </section>
     </div>
@@ -533,9 +549,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-darksoft text-gray-100 font-sans pb-10 relative overflow-x-hidden">
+       {/* Sfondo Astratto */}
        <div className="fixed inset-0 pointer-events-none z-0">
          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"></div>
          <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-lilla-600/5 rounded-full blur-[140px]"></div>
+         <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-blue-600/5 rounded-full blur-[120px]"></div>
        </div>
 
        <div className="relative z-10 max-w-6xl mx-auto px-4 py-6">
@@ -547,9 +565,14 @@ export default function App() {
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-lilla-300 leading-none">Fabia Budget</h1>
-                  {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} title="Sincronizzato Cloud" />}
-                  {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} title="Sincronizzazione in corso..." />}
-                  {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} title="Errore Cloud - Solo Locale" />}
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} 
+                    className="hover:scale-110 transition-transform active:rotate-180 duration-500"
+                  >
+                    {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} title="Sincronizzato Cloud (Clicca per aggiornare)" />}
+                    {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} title="Sincronizzazione in corso..." />}
+                    {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} title="Errore Cloud - Solo Locale (Clicca per riprovare)" />}
+                  </button>
                 </div>
                 <p className="text-[10px] text-lilla-400 font-black uppercase tracking-[0.25em] mt-1">Gestione Casa</p>
               </div>
@@ -574,10 +597,11 @@ export default function App() {
           </main>
        </div>
 
+       {/* MODALI RIMASTE INVARIATE PER LOGICA MA AGGIORNATE NEI DETTAGLI */}
        {txModalOpen && selectedCategory && (
          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in">
            <div className="bg-[#13111C] border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative animate-in zoom-in-95">
-             <button onClick={() => setTxModalOpen(false)} className="absolute top-5 right-5 text-gray-500 hover:text-white bg-white/5 p-2 rounded-full">
+             <button onClick={() => setTxModalOpen(false)} className="absolute top-5 right-5 text-gray-500 hover:text-white bg-white/5 p-2 rounded-full transition-colors">
                <X size={20} />
              </button>
              <div className="text-center mb-8">
@@ -593,7 +617,7 @@ export default function App() {
                     type="date" 
                     value={date} 
                     onChange={(e) => setDate(e.target.value)} 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20"
                   />
                 </div>
                 <div className="space-y-2">
@@ -603,7 +627,7 @@ export default function App() {
                     value={amount} 
                     onChange={(e) => setAmount(e.target.value)} 
                     placeholder="0.00" 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-white focus:outline-none text-center"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-white focus:outline-none text-center focus:ring-2 focus:ring-lilla-500/20"
                   />
                 </div>
                 <div className="space-y-2">
@@ -612,7 +636,8 @@ export default function App() {
                     type="text" 
                     value={description} 
                     onChange={(e) => setDescription(e.target.value)} 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none"
+                    placeholder="Es: Ricarica telefonica..."
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20"
                   />
                 </div>
                 <div className="pt-6">
