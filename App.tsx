@@ -43,7 +43,14 @@ const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
   { id: 'pegno', label: 'Pegno', amount: 300, icon: '💍', colorName: 'amber', paidMonths: [], group: 'alternata' },
   { id: 'ass-auto', label: 'Assicurazione Auto', amount: 570, icon: '🛡️', colorName: 'blue', paidMonths: [], group: 'alternata' },
   { id: 'bollo-auto', label: 'Bollo Auto', amount: 150, icon: '🚗', colorName: 'red', paidMonths: [], group: 'alternata' },
-  { id: 'ade-26-05', label: 'Agenzia Entrate', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-05-31' },
+  // Rate AdE
+  { id: 'ade-26-05', label: 'AdE Maggio 26', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-05-31' },
+  { id: 'ade-26-07', label: 'AdE Luglio 26', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-07-31' },
+  { id: 'ade-26-11', label: 'AdE Nov 26', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-11-30' },
+  { id: 'ade-27-02', label: 'AdE Feb 27', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-02-28' },
+  { id: 'ade-27-05', label: 'AdE Mag 27', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-05-31' },
+  { id: 'ade-27-07', label: 'AdE Lug 27', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-07-31' },
+  { id: 'ade-27-11', label: 'AdE Nov 27', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-11-30' },
 ];
 
 const DEFAULT_CATEGORIES: CategoryConfig[] = [
@@ -93,7 +100,7 @@ const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: {
   }
 
   return (
-    <div className={`bg-gradient-to-br ${bgGradient} backdrop-blur-md border ${borderColor} rounded-2xl p-5 flex flex-col items-center justify-center shadow-lg relative overflow-hidden transition-all ${highlight ? 'ring-1 ring-lilla-500/20' : ''}`}>
+    <div className={`bg-gradient-to-br ${bgGradient} backdrop-blur-md border ${borderColor} rounded-2xl p-5 flex flex-col items-center justify-center shadow-lg relative overflow-hidden transition-all ${highlight ? 'ring-1 ring-lilla-500/20 shadow-lilla-500/10' : ''}`}>
       <div className="absolute top-0 right-0 p-3 opacity-20">{icon}</div>
       <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-1">{title}</span>
       <span className={`text-xl md:text-2xl font-black ${textColor} drop-shadow-sm`}>{isVisible ? formatted : '••••••'}</span>
@@ -280,23 +287,6 @@ export default function App() {
 
   const hasUrgentDeadline = visibleFixed.some(f => f.dueDate && !f.paidMonths.includes(currentMonthKey));
 
-  const getSyncTitle = () => {
-    if (dbStatus === 'connected') return "Sincronizzato Cloud";
-    if (dbStatus === 'syncing') return "Sincronizzazione in corso...";
-    if (dbStatus === 'error') return "Errore Cloud - Solo Locale";
-    return "";
-  };
-
-  const getFixedBtnClasses = (fe: FixedExpense) => {
-    const isPaid = fe.paidMonths.includes(currentMonthKey);
-    const base = "flex items-center justify-between p-3 rounded-2xl border transition-all relative ";
-    const isFiscal = !!fe.dueDate;
-    
-    if (isPaid) return base + "bg-emerald-500/10 border-emerald-500/40";
-    if (isFiscal) return base + "bg-red-600/10 border-red-500/60 shadow-lg shadow-red-500/10";
-    return base + "bg-white/5 border-white/10 hover:border-lilla-500/30";
-  };
-
   const renderHome = () => (
     <div className="space-y-8 animate-in fade-in pb-10">
       <div className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 shadow-lg mx-1">
@@ -323,9 +313,9 @@ export default function App() {
       )}
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard title="Entrate + Residuo" amount={totalAvail} type="income" isVisible={true} subtitle={`Residuo Precedente: ${residue.toFixed(2)}€`} />
-        <StatCard title="Speso nel Mese" amount={actualSpent} type="expense" isVisible={true} subtitle="Somma spunte + extra" />
-        <StatCard title="Budget Attuale" amount={currentBal} type="total" isVisible={true} highlight subtitle="Soldi rimasti oggi" />
+        <StatCard title="Entrate + Residuo" amount={totalAvail} type="income" isVisible={true} subtitle={`Residuo: ${residue.toFixed(2)}€`} />
+        <StatCard title="Speso nel Mese" amount={actualSpent} type="expense" isVisible={true} subtitle="Spunte + Extra" />
+        <StatCard title="Budget Attuale" amount={currentBal} type="total" isVisible={true} highlight subtitle="Rimasto ad oggi" />
       </section>
 
       <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
@@ -340,7 +330,11 @@ export default function App() {
               {visibleFixed.filter(f => f.group === 'mensile').map(fe => {
                 const p = fe.paidMonths.includes(currentMonthKey);
                 return (
-                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={getFixedBtnClasses(fe)}>
+                  <button 
+                    key={fe.id} 
+                    onClick={() => togglePaidFixed(fe.id)} 
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}
+                  >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl">{fe.icon}</span>
                       <div className="text-left">
@@ -358,13 +352,17 @@ export default function App() {
           </div>
 
           <div>
-            <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest border-b border-white/5 block mb-4 pb-1">Altre Scadenze</span>
+            <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest border-b border-white/5 block mb-4 pb-1">Straordinarie & Scadenze</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {visibleFixed.filter(f => f.group !== 'mensile').map(fe => {
                 const p = fe.paidMonths.includes(currentMonthKey);
                 const isFiscal = !!fe.dueDate;
                 return (
-                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={getFixedBtnClasses(fe)}>
+                  <button 
+                    key={fe.id} 
+                    onClick={() => togglePaidFixed(fe.id)} 
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${isFiscal ? (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-red-600/10 border-red-500/60 shadow-lg shadow-red-500/10') : (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30')}`}
+                  >
                     {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-red-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Scadenza</span>}
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl">{fe.icon}</span>
@@ -386,7 +384,7 @@ export default function App() {
 
       <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
-           <List className="text-lilla-400" size={20}/> Registro Movimenti
+           <List className="text-lilla-400" size={20}/> Registro Movimenti Extra
         </h2>
         <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
           <table className="w-full text-left text-sm border-collapse">
@@ -401,7 +399,7 @@ export default function App() {
             <tbody className="divide-y divide-white/5">
               {monthlyTrans.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento registrato.</td>
+                  <td colSpan={4} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento manuale.</td>
                 </tr>
               ) : (
                 monthlyTrans.map(tx => {
@@ -436,7 +434,7 @@ export default function App() {
 
       <section className="space-y-6">
           <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black mb-4 flex items-center gap-3">
-            <ArrowDownCircle className="text-rose-400" /> Movimenti Extra
+            <ArrowDownCircle className="text-rose-400" /> Registra Movimento
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
               {DEFAULT_CATEGORIES.map(cat => (
@@ -454,7 +452,7 @@ export default function App() {
     <div className="space-y-8 animate-in slide-in-from-right px-1">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
-            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Analisi Categorie</h3>
+            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Spese per Categoria</h3>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -468,7 +466,7 @@ export default function App() {
             </div>
           </div>
           <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
-            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Riepilogo Mensile</h3>
+            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Entrate vs Uscite</h3>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData}>
@@ -491,7 +489,7 @@ export default function App() {
     <div className="space-y-8 max-w-2xl mx-auto pb-10 px-1">
       <section className="bg-[#1a1625] rounded-3xl p-8 shadow-xl border border-white/5">
          <h2 className="text-xl font-black text-white mb-6 flex items-center gap-3 uppercase tracking-tight">
-           <CreditCard className="text-blue-600" /> Archivio Fisse & Scadenze
+           <CreditCard className="text-blue-600" /> Archivio Piano Fisse
          </h2>
          <div className="space-y-3">
             {fixedExpenses.sort((a,b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999')).map(fe => (
@@ -515,10 +513,10 @@ export default function App() {
       </section>
 
       <section className="bg-red-950/10 border border-red-500/20 rounded-3xl p-8 shadow-xl text-center">
-        <h2 className="text-lg font-black text-white mb-6 uppercase tracking-tight">Manutenzione Dati</h2>
+        <h2 className="text-lg font-black text-white mb-6 uppercase tracking-tight">Manutenzione Sistema</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button onClick={() => setResetModalOpen(true)} className="w-full bg-red-600/20 border border-red-500/30 text-red-100 font-black py-4 rounded-xl uppercase text-xs hover:bg-red-600/30 transition-all">Reset App</button>
-            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-white/5 border border-white/10 text-gray-400 font-black py-4 rounded-xl uppercase text-xs hover:bg-white/10 transition-all">Svuota Cache</button>
+            <button onClick={() => setResetModalOpen(true)} className="w-full bg-red-600/20 border border-red-500/30 text-red-100 font-black py-4 rounded-xl uppercase text-xs hover:bg-red-600/30 transition-all">Svuota Dati</button>
+            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-white/5 border border-white/10 text-gray-400 font-black py-4 rounded-xl uppercase text-xs hover:bg-white/10 transition-all">Reset Cache</button>
         </div>
       </section>
     </div>
@@ -543,24 +541,24 @@ export default function App() {
                   <button 
                     onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} 
                     className="hover:scale-110 transition-transform active:rotate-180 duration-500"
-                    title={getSyncTitle()}
+                    title={dbStatus === 'connected' ? "Sincronizzato" : (dbStatus === 'syncing' ? "In corso..." : "Errore Cloud")}
                   >
                     {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} />}
                     {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} />}
                     {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} />}
                   </button>
                 </div>
-                <p className="text-[10px] text-lilla-400 font-black uppercase tracking-[0.25em] mt-1">Gestione Casa</p>
+                <p className="text-[10px] text-lilla-400 font-black uppercase tracking-[0.25em] mt-1">Gestione Familiare</p>
               </div>
             </div>
             <nav className="flex bg-[#1a1625]/80 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 shadow-xl">
-               <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white shadow-md' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white shadow-lg shadow-lilla-500/20' : 'text-gray-500 hover:text-white'}`}>
                  <Home size={16} /> Home
                </button>
-               <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white shadow-md' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white shadow-lg shadow-lilla-500/20' : 'text-gray-500 hover:text-white'}`}>
                  <PieChartIcon size={16} /> Analisi
                </button>
-               <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white shadow-md' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white shadow-lg shadow-lilla-500/20' : 'text-gray-500 hover:text-white'}`}>
                  <Settings size={16} /> Archivio
                </button>
             </nav>
@@ -592,7 +590,7 @@ export default function App() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Nota</label>
-                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Aggiungi una nota..." className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
+                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Opzionale..." className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
                 </div>
                 <div className="pt-6">
                   <NeonButton onClick={handleSaveTransaction} fullWidth color={selectedCategory.colorName}>Conferma</NeonButton>
@@ -606,11 +604,11 @@ export default function App() {
          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-in fade-in">
             <div className="bg-red-950/20 border border-red-500/40 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl text-center">
                 <div className="bg-red-600 p-6 rounded-full text-white mx-auto mb-8 w-fit animate-pulse"><AlertTriangle size={48} /></div>
-                <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">RESET TOTALE?</h3>
-                <p className="text-red-200/60 text-sm mb-10">Tutte le transazioni verranno cancellate dal cloud e dal dispositivo.</p>
+                <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">SVUOTA TUTTO?</h3>
+                <p className="text-red-200/60 text-sm mb-10">L'operazione è irreversibile sia in locale che in cloud.</p>
                 <div className="flex flex-col gap-3">
                   <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 py-5 rounded-2xl font-black uppercase text-xs transition-all">Annulla</button>
-                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-red-600 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-red-600/30 transition-all">Sì, Svuota Tutto</button>
+                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-red-600 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-red-600/30 transition-all">Conferma Reset</button>
                 </div>
             </div>
          </div>
@@ -621,7 +619,7 @@ export default function App() {
             <div className="bg-[#13111C] border border-white/10 w-full max-w-sm rounded-[2rem] p-8 shadow-2xl text-center">
                 <div className="bg-rose-500/20 p-5 rounded-full text-rose-500 mx-auto mb-6 w-fit"><AlertTriangle size={40} /></div>
                 <h3 className="text-2xl font-black text-white mb-2 uppercase tracking-tighter">Eliminare Voce?</h3>
-                <p className="text-gray-500 text-sm mb-8 font-medium italic leading-tight">Verrà rimossa dal bilancio pianificato.</p>
+                <p className="text-gray-500 text-sm mb-8 font-medium italic leading-tight">Verrà rimossa definitivamente dal piano spese.</p>
                 <div className="grid grid-cols-2 gap-4">
                   <button onClick={() => setDeleteFixedModalOpen(false)} className="bg-white/5 py-4 rounded-2xl font-black uppercase text-xs tracking-widest transition-all">No</button>
                   <button 
