@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Home, 
   PieChart as PieChartIcon, 
@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
-import { Transaction, CategoryConfig, DefaultCategoryIds, ButtonColor, FixedExpense } from './types';
+import { Transaction, CategoryConfig, DefaultCategoryIds, FixedExpense } from './types';
 import NeonButton from './components/NeonButton';
 import { initDb, fetchAllData, saveTransactionDb, saveFixedExpenseDb, deleteTransactionDb, deleteFixedExpenseDb } from './services/dbService';
 
@@ -65,9 +65,10 @@ const DEFAULT_CATEGORIES: CategoryConfig[] = [
 ];
 
 const COLORS = ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#6b7280'];
-
 const STORAGE_KEY = 'lillabudget_transactions';
 const FIXED_EXPENSES_KEY = 'lillabudget_fixed_expenses';
+
+// --- Sotto-Componenti ---
 
 const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: { 
   title: string, 
@@ -88,21 +89,19 @@ const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: {
     icon = <TrendingUp className="text-emerald-500" size={20} />; 
     bgGradient = 'from-emerald-900/10 to-slate-900'; 
     borderColor = 'border-emerald-500/20'; 
-  }
-  if (type === 'expense') { 
+  } else if (type === 'expense') { 
     textColor = 'text-rose-400'; 
     icon = <TrendingDown className="text-rose-500" size={20} />; 
     bgGradient = 'from-rose-900/10 to-slate-900'; 
     borderColor = 'border-rose-500/20'; 
-  }
-  if (type === 'total') { 
+  } else if (type === 'total') { 
     textColor = 'text-lilla-300'; 
     bgGradient = highlight ? 'from-lilla-600/20 to-slate-900' : 'from-lilla-900/10 to-slate-900'; 
     borderColor = highlight ? 'border-lilla-500/50' : 'border-lilla-500/20'; 
   }
 
   return (
-    <div className={`bg-gradient-to-br ${bgGradient} backdrop-blur-md border ${borderColor} rounded-2xl p-5 flex flex-col items-center justify-center shadow-lg relative overflow-hidden transition-all ${highlight ? 'ring-1 ring-lilla-500/20 shadow-lilla-500/10' : ''}`}>
+    <div className={`bg-gradient-to-br ${bgGradient} backdrop-blur-md border ${borderColor} rounded-2xl p-5 flex flex-col items-center justify-center shadow-lg relative overflow-hidden transition-all ${highlight ? 'ring-1 ring-lilla-500/20' : ''}`}>
       <div className="absolute top-0 right-0 p-3 opacity-20">{icon}</div>
       <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-1">{title}</span>
       <span className={`text-xl md:text-2xl font-black ${textColor} drop-shadow-sm`}>{isVisible ? formatted : '••••••'}</span>
@@ -128,13 +127,13 @@ export default function App() {
   const [deleteFixedModalOpen, setDeleteFixedModalOpen] = useState(false);
   const [fixedToDelete, setFixedToDelete] = useState<string | null>(null);
 
-  // --- Funzione di Sincronizzazione Cloud ---
+  // --- Logica Sincronizzazione ---
+
   const syncWithCloud = async () => {
     if (!process.env.DATABASE_URL) {
       setDbStatus('error');
       return;
     }
-
     setDbStatus('syncing');
     try {
       await initDb();
@@ -147,38 +146,35 @@ export default function App() {
         setDbStatus('error');
       }
     } catch (err) {
+      console.error(err);
       setDbStatus('error');
     }
   };
 
-  // --- Inizializzazione ---
   useEffect(() => {
-    const loadInitialData = async () => {
-      const sTx = localStorage.getItem(STORAGE_KEY);
-      const sFx = localStorage.getItem(FIXED_EXPENSES_KEY);
-      if (sTx) setTransactions(JSON.parse(sTx));
-      if (sFx) setFixedExpenses(JSON.parse(sFx));
-
-      await syncWithCloud();
-    };
-
-    loadInitialData();
+    const localTx = localStorage.getItem(STORAGE_KEY);
+    const localFx = localStorage.getItem(FIXED_EXPENSES_KEY);
+    if (localTx) setTransactions(JSON.parse(localTx));
+    if (localFx) setFixedExpenses(JSON.parse(localFx));
+    syncWithCloud();
   }, []);
 
-  // --- Persistenza locale ---
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
     localStorage.setItem(FIXED_EXPENSES_KEY, JSON.stringify(fixedExpenses));
   }, [transactions, fixedExpenses]);
 
+  // --- Helpers ---
+
   const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
   const getMonthName = (d: Date) => new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' }).format(d);
-  
   const changeMonth = (inc: number) => { 
     const n = new Date(currentDate); 
     n.setMonth(n.getMonth() + inc); 
     setCurrentDate(n); 
   };
+
+  // --- Azioni ---
 
   const handleSaveTransaction = async () => {
     if (!amount || !selectedCategory) return;
@@ -199,7 +195,6 @@ export default function App() {
     setAmount('');
     setDescription('');
 
-    // Salva su Cloud
     setDbStatus('syncing');
     await saveTransactionDb(newTx);
     setDbStatus('connected');
@@ -214,9 +209,8 @@ export default function App() {
 
   const togglePaidFixed = async (id: string) => {
     let updatedExpense: FixedExpense | null = null;
-
     setFixedExpenses(prev => {
-      const updated = prev.map(fe => {
+      return prev.map(fe => {
         if (fe.id === id) {
           const isPaid = fe.paidMonths.includes(currentMonthKey);
           updatedExpense = { 
@@ -229,7 +223,6 @@ export default function App() {
         } 
         return fe;
       });
-      return updated;
     });
 
     if (updatedExpense) {
@@ -238,6 +231,8 @@ export default function App() {
       setDbStatus('connected');
     }
   };
+
+  // --- Calcoli Budget ---
 
   const residue = useMemo(() => {
     const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -253,10 +248,12 @@ export default function App() {
     return pastManual - pastFixed;
   }, [transactions, fixedExpenses, currentDate]);
 
-  const monthlyTrans = useMemo(() => transactions.filter(t => {
-    const d = new Date(t.date); 
-    return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
-  }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [transactions, currentDate]);
+  const monthlyTrans = useMemo(() => {
+    return transactions.filter(t => {
+      const d = new Date(t.date); 
+      return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
+    }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [transactions, currentDate]);
 
   const monthlyInc = monthlyTrans.filter(t => t.type === 'income').reduce((a, b) => a + b.amount, 0);
   const monthlyManExp = monthlyTrans.filter(t => t.type === 'expense').reduce((a, b) => a + b.amount, 0);
@@ -285,22 +282,20 @@ export default function App() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [monthlyTrans, fixedExpenses, currentMonthKey]);
 
-  const monthlyData = useMemo(() => [
+  const monthlyData = [
     { name: 'Disponibile', amount: totalAvail },
     { name: 'Speso', amount: actualSpent }
-  ], [totalAvail, actualSpent]);
+  ];
 
-  const visibleFixed = useMemo(() => {
-    return fixedExpenses.filter(fe => {
-      if (!fe.dueDate) return true;
-      const [y, m] = fe.dueDate.split('-').map(Number);
-      return y === currentDate.getFullYear() && (m - 1) === currentDate.getMonth();
-    });
-  }, [fixedExpenses, currentDate]);
+  const visibleFixed = fixedExpenses.filter(fe => {
+    if (!fe.dueDate) return true;
+    const [y, m] = fe.dueDate.split('-').map(Number);
+    return y === currentDate.getFullYear() && (m - 1) === currentDate.getMonth();
+  });
 
-  const hasUrgentDeadline = useMemo(() => {
-    return visibleFixed.some(f => f.dueDate && !f.paidMonths.includes(currentMonthKey));
-  }, [visibleFixed, currentMonthKey]);
+  const hasUrgentDeadline = visibleFixed.some(f => f.dueDate && !f.paidMonths.includes(currentMonthKey));
+
+  // --- Rendering ---
 
   const renderHome = () => (
     <div className="space-y-8 animate-in fade-in pb-10">
@@ -321,8 +316,8 @@ export default function App() {
         <div className="mx-1 bg-red-600/20 border border-red-500/50 rounded-2xl p-4 flex items-center gap-4 animate-pulse">
            <AlertCircle className="text-red-500 shrink-0" size={32} />
            <div>
-             <p className="text-red-100 font-black uppercase text-xs tracking-tighter">Scadenza Agenzia Entrate!</p>
-             <p className="text-red-200/70 text-[10px] font-bold">Hai una rata fiscale in sospeso questo mese.</p>
+             <p className="text-red-100 font-black uppercase text-xs tracking-tighter">Scadenza Fiscale!</p>
+             <p className="text-red-200/70 text-[10px] font-bold">Hai una rata in scadenza questo mese.</p>
            </div>
         </div>
       )}
@@ -345,11 +340,7 @@ export default function App() {
               {visibleFixed.filter(f => f.group === 'mensile').map(fe => {
                 const p = fe.paidMonths.includes(currentMonthKey);
                 return (
-                  <button 
-                    key={fe.id} 
-                    onClick={() => togglePaidFixed(fe.id)} 
-                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}
-                  >
+                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}>
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl">{fe.icon}</span>
                       <div className="text-left">
@@ -369,15 +360,11 @@ export default function App() {
           <div>
             <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest border-b border-white/5 block mb-4 pb-1">Scadenze Straordinarie</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {visibleFixed.filter(f => f.group === 'alternata' || !f.group).map(fe => {
+              {visibleFixed.filter(f => f.group !== 'mensile').map(fe => {
                 const p = fe.paidMonths.includes(currentMonthKey);
                 const isFiscal = !!fe.dueDate;
                 return (
-                  <button 
-                    key={fe.id} 
-                    onClick={() => togglePaidFixed(fe.id)} 
-                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${isFiscal ? (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-red-600/10 border-red-500/60 shadow-lg shadow-red-500/10') : (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}
-                  >
+                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${isFiscal ? (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-red-600/10 border-red-500/60 shadow-lg shadow-red-500/10') : (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30')}`}>
                     {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-red-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Rata Fiscali</span>}
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl">{fe.icon}</span>
@@ -397,15 +384,13 @@ export default function App() {
         </div>
       </section>
 
-      {/* REGISTRO PRIMA NOTA */}
       <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
-           <List className="text-lilla-400" size={20}/> Prima Nota (Movimenti)
+           <List className="text-lilla-400" size={20}/> Prima Nota (Registro)
         </h2>
-        
         <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
           <table className="w-full text-left text-sm border-collapse">
-            <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10 shadow-sm">
+            <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10">
               <tr>
                 <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Data</th>
                 <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Categoria</th>
@@ -417,7 +402,7 @@ export default function App() {
             <tbody className="divide-y divide-white/5">
               {monthlyTrans.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento registrato questo mese.</td>
+                  <td colSpan={5} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento questo mese.</td>
                 </tr>
               ) : (
                 monthlyTrans.map(tx => {
@@ -433,18 +418,12 @@ export default function App() {
                           <span className="font-bold text-gray-200">{cat?.label || tx.category}</span>
                         </div>
                       </td>
-                      <td className="py-4 px-4 text-xs text-gray-400 italic max-w-[150px] md:max-w-none truncate">
-                        {tx.description || '-'}
-                      </td>
+                      <td className="py-4 px-4 text-xs text-gray-400 italic max-w-[150px] truncate">{tx.description || '-'}</td>
                       <td className={`py-4 px-4 text-right font-black ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {tx.type === 'income' ? '+' : '-'}{tx.amount.toFixed(2)}€
                       </td>
                       <td className="py-4 px-4 text-right">
-                        <button 
-                          onClick={() => handleDeleteTransaction(tx.id)}
-                          className="p-2 text-gray-600 hover:text-rose-500 md:opacity-0 group-hover:opacity-100 transition-all transform hover:scale-110"
-                          title="Elimina movimento"
-                        >
+                        <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 text-gray-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all transform hover:scale-110">
                           <Trash2 size={16} />
                         </button>
                       </td>
@@ -484,7 +463,7 @@ export default function App() {
                   <Pie data={expensesByCategory} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                     {expensesByCategory.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#1a1625', border: '1px solid #ffffff10', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#1a1625', border: '1px solid #ffffff10', borderRadius: '12px', fontSize: '12px' }} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -549,11 +528,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-darksoft text-gray-100 font-sans pb-10 relative overflow-x-hidden">
-       {/* Sfondo Astratto */}
        <div className="fixed inset-0 pointer-events-none z-0">
          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"></div>
          <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-lilla-600/5 rounded-full blur-[140px]"></div>
-         <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-blue-600/5 rounded-full blur-[120px]"></div>
        </div>
 
        <div className="relative z-10 max-w-6xl mx-auto px-4 py-6">
@@ -565,26 +542,23 @@ export default function App() {
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-lilla-300 leading-none">Fabia Budget</h1>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} 
-                    className="hover:scale-110 transition-transform active:rotate-180 duration-500"
-                  >
-                    {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} title="Sincronizzato Cloud (Clicca per aggiornare)" />}
-                    {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} title="Sincronizzazione in corso..." />}
-                    {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} title="Errore Cloud - Solo Locale (Clicca per riprovare)" />}
+                  <button onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} className="hover:scale-110 transition-transform active:rotate-180 duration-500">
+                    {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} title="Sincronizzato Cloud" />}
+                    {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} title="Sincronizzazione..." />}
+                    {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} title="Errore Cloud" />}
                   </button>
                 </div>
                 <p className="text-[10px] text-lilla-400 font-black uppercase tracking-[0.25em] mt-1">Gestione Casa</p>
               </div>
             </div>
             <nav className="flex bg-[#1a1625]/80 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 shadow-xl">
-               <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white shadow-md' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white' : 'text-gray-500 hover:text-white'}`}>
                  <Home size={16} /> Home
                </button>
-               <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white shadow-md' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white' : 'text-gray-500 hover:text-white'}`}>
                  <PieChartIcon size={16} /> Analisi
                </button>
-               <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white shadow-md' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white' : 'text-gray-500 hover:text-white'}`}>
                  <Settings size={16} /> Archivio
                </button>
             </nav>
@@ -597,48 +571,26 @@ export default function App() {
           </main>
        </div>
 
-       {/* MODALI RIMASTE INVARIATE PER LOGICA MA AGGIORNATE NEI DETTAGLI */}
        {txModalOpen && selectedCategory && (
          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in">
            <div className="bg-[#13111C] border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative animate-in zoom-in-95">
-             <button onClick={() => setTxModalOpen(false)} className="absolute top-5 right-5 text-gray-500 hover:text-white bg-white/5 p-2 rounded-full transition-colors">
-               <X size={20} />
-             </button>
+             <button onClick={() => setTxModalOpen(false)} className="absolute top-5 right-5 text-gray-500 hover:text-white bg-white/5 p-2 rounded-full transition-colors"><X size={20} /></button>
              <div className="text-center mb-8">
-                <div className={`w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-5xl mb-4 shadow-xl ${selectedCategory.colorClass} text-white`}>
-                  {selectedCategory.icon}
-                </div>
+                <div className={`w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-5xl mb-4 shadow-xl ${selectedCategory.colorClass} text-white`}>{selectedCategory.icon}</div>
                 <h2 className="text-2xl font-black text-white uppercase tracking-tight">Registra {selectedCategory.label}</h2>
              </div>
              <div className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Data</label>
-                  <input 
-                    type="date" 
-                    value={date} 
-                    onChange={(e) => setDate(e.target.value)} 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20"
-                  />
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Importo (€)</label>
-                  <input 
-                    type="number" 
-                    value={amount} 
-                    onChange={(e) => setAmount(e.target.value)} 
-                    placeholder="0.00" 
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-white focus:outline-none text-center focus:ring-2 focus:ring-lilla-500/20"
-                  />
+                  <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-white focus:outline-none text-center focus:ring-2 focus:ring-lilla-500/20" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Nota</label>
-                  <input 
-                    type="text" 
-                    value={description} 
-                    onChange={(e) => setDescription(e.target.value)} 
-                    placeholder="Es: Ricarica telefonica..."
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20"
-                  />
+                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
                 </div>
                 <div className="pt-6">
                   <NeonButton onClick={handleSaveTransaction} fullWidth color={selectedCategory.colorName}>Conferma</NeonButton>
@@ -651,24 +603,12 @@ export default function App() {
        {resetModalOpen && (
          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-in fade-in">
             <div className="bg-red-950/20 border border-red-500/40 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl text-center">
-                <div className="bg-red-600 p-6 rounded-full text-white mx-auto mb-8 w-fit animate-pulse">
-                  <AlertTriangle size={48} />
-                </div>
+                <div className="bg-red-600 p-6 rounded-full text-white mx-auto mb-8 w-fit animate-pulse"><AlertTriangle size={48} /></div>
                 <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">RESET TOTALE?</h3>
-                <p className="text-red-200/60 text-sm mb-10">Tutte le transazioni e le rate verranno cancellate dal cloud e dal dispositivo.</p>
+                <p className="text-red-200/60 text-sm mb-10">Tutte le transazioni verranno cancellate.</p>
                 <div className="flex flex-col gap-3">
-                  <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 hover:bg-white/10 py-5 rounded-2xl font-black uppercase text-xs transition-all">
-                    Annulla
-                  </button>
-                  <button 
-                    onClick={async () => { 
-                      localStorage.clear(); 
-                      window.location.reload(); 
-                    }} 
-                    className="w-full bg-red-600 hover:bg-red-700 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-red-600/30 transition-all"
-                  >
-                    Sì, Svuota Tutto
-                  </button>
+                  <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 py-5 rounded-2xl font-black uppercase text-xs transition-all">Annulla</button>
+                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-red-600 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-red-600/30 transition-all">Sì, Svuota Tutto</button>
                 </div>
             </div>
          </div>
@@ -677,13 +617,11 @@ export default function App() {
        {deleteFixedModalOpen && (
          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
             <div className="bg-[#13111C] border border-white/10 w-full max-w-sm rounded-[2rem] p-8 shadow-2xl text-center">
-                <div className="bg-rose-500/20 p-5 rounded-full text-rose-500 mx-auto mb-6 w-fit">
-                  <AlertTriangle size={40} />
-                </div>
+                <div className="bg-rose-500/20 p-5 rounded-full text-rose-500 mx-auto mb-6 w-fit"><AlertTriangle size={40} /></div>
                 <h3 className="text-2xl font-black text-white mb-2 uppercase tracking-tighter">Eliminare Voce?</h3>
-                <p className="text-gray-500 text-sm mb-8 font-medium italic leading-tight">Verrà rimossa definitivamente dal bilancio pianificato.</p>
+                <p className="text-gray-500 text-sm mb-8 font-medium italic leading-tight">Verrà rimossa dal bilancio pianificato.</p>
                 <div className="grid grid-cols-2 gap-4">
-                  <button onClick={() => setDeleteFixedModalOpen(false)} className="bg-white/5 hover:bg-white/10 py-4 rounded-2xl font-black uppercase text-xs tracking-widest transition-all">No</button>
+                  <button onClick={() => setDeleteFixedModalOpen(false)} className="bg-white/5 py-4 rounded-2xl font-black uppercase text-xs tracking-widest transition-all">No</button>
                   <button 
                     onClick={async () => {
                       if (fixedToDelete) {
@@ -693,10 +631,8 @@ export default function App() {
                         setFixedToDelete(null);
                       }
                     }} 
-                    className="bg-rose-600 hover:bg-rose-700 py-4 rounded-2xl font-black uppercase text-xs tracking-widest text-white shadow-lg shadow-rose-600/20 transition-all"
-                  >
-                    Sì, Elimina
-                  </button>
+                    className="bg-rose-600 py-4 rounded-2xl font-black uppercase text-xs tracking-widest text-white shadow-lg shadow-rose-600/20 transition-all"
+                  >Sì, Elimina</button>
                 </div>
             </div>
          </div>
