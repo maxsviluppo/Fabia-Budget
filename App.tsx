@@ -93,7 +93,7 @@ const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: {
   }
 
   return (
-    <div className={`bg-gradient-to-br ${bgGradient} backdrop-blur-md border ${borderColor} rounded-2xl p-5 flex flex-col items-center justify-center shadow-lg relative overflow-hidden transition-all ${highlight ? 'ring-1 ring-lilla-500/20 shadow-lilla-500/10' : ''}`}>
+    <div className={`bg-gradient-to-br ${bgGradient} backdrop-blur-md border ${borderColor} rounded-2xl p-5 flex flex-col items-center justify-center shadow-lg relative overflow-hidden transition-all ${highlight ? 'ring-1 ring-lilla-500/20' : ''}`}>
       <div className="absolute top-0 right-0 p-3 opacity-20">{icon}</div>
       <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-1">{title}</span>
       <span className={`text-xl md:text-2xl font-black ${textColor} drop-shadow-sm`}>{isVisible ? formatted : '••••••'}</span>
@@ -280,6 +280,23 @@ export default function App() {
 
   const hasUrgentDeadline = visibleFixed.some(f => f.dueDate && !f.paidMonths.includes(currentMonthKey));
 
+  const getSyncTitle = () => {
+    if (dbStatus === 'connected') return "Sincronizzato Cloud";
+    if (dbStatus === 'syncing') return "Sincronizzazione in corso...";
+    if (dbStatus === 'error') return "Errore Cloud - Solo Locale";
+    return "";
+  };
+
+  const getFixedBtnClasses = (fe: FixedExpense) => {
+    const isPaid = fe.paidMonths.includes(currentMonthKey);
+    const base = "flex items-center justify-between p-3 rounded-2xl border transition-all relative ";
+    const isFiscal = !!fe.dueDate;
+    
+    if (isPaid) return base + "bg-emerald-500/10 border-emerald-500/40";
+    if (isFiscal) return base + "bg-red-600/10 border-red-500/60 shadow-lg shadow-red-500/10";
+    return base + "bg-white/5 border-white/10 hover:border-lilla-500/30";
+  };
+
   const renderHome = () => (
     <div className="space-y-8 animate-in fade-in pb-10">
       <div className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 shadow-lg mx-1">
@@ -323,7 +340,7 @@ export default function App() {
               {visibleFixed.filter(f => f.group === 'mensile').map(fe => {
                 const p = fe.paidMonths.includes(currentMonthKey);
                 return (
-                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}>
+                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={getFixedBtnClasses(fe)}>
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl">{fe.icon}</span>
                       <div className="text-left">
@@ -347,8 +364,8 @@ export default function App() {
                 const p = fe.paidMonths.includes(currentMonthKey);
                 const isFiscal = !!fe.dueDate;
                 return (
-                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${isFiscal ? (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-red-600/10 border-red-500/60 shadow-lg shadow-red-500/10') : (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30')}`}>
-                    {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-red-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Rata Fiscali</span>}
+                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={getFixedBtnClasses(fe)}>
+                    {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-red-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Scadenza</span>}
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl">{fe.icon}</span>
                       <div className="text-left">
@@ -369,7 +386,7 @@ export default function App() {
 
       <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
-           <List className="text-lilla-400" size={20}/> Prima Nota (Registro)
+           <List className="text-lilla-400" size={20}/> Registro Movimenti
         </h2>
         <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
           <table className="w-full text-left text-sm border-collapse">
@@ -377,7 +394,6 @@ export default function App() {
               <tr>
                 <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Data</th>
                 <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Categoria</th>
-                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Nota</th>
                 <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Importo</th>
                 <th className="py-3 px-4 w-10"></th>
               </tr>
@@ -385,7 +401,7 @@ export default function App() {
             <tbody className="divide-y divide-white/5">
               {monthlyTrans.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento registrato questo mese.</td>
+                  <td colSpan={4} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento registrato.</td>
                 </tr>
               ) : (
                 monthlyTrans.map(tx => {
@@ -401,7 +417,6 @@ export default function App() {
                           <span className="font-bold text-gray-200">{cat?.label || tx.category}</span>
                         </div>
                       </td>
-                      <td className="py-4 px-4 text-xs text-gray-400 italic max-w-[150px] truncate">{tx.description || '-'}</td>
                       <td className={`py-4 px-4 text-right font-black ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {tx.type === 'income' ? '+' : '-'}{tx.amount.toFixed(2)}€
                       </td>
@@ -480,7 +495,7 @@ export default function App() {
          </h2>
          <div className="space-y-3">
             {fixedExpenses.sort((a,b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999')).map(fe => (
-              <div key={fe.id} className={`flex items-center justify-between bg-white/5 p-4 rounded-xl border transition-colors group ${fe.dueDate ? 'border-red-500/20' : 'border-white/5'}`}>
+              <div key={fe.id} className="flex items-center justify-between bg-white/5 p-4 rounded-xl border border-white/5 transition-colors group">
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">{fe.icon}</span>
                   <div>
@@ -508,12 +523,6 @@ export default function App() {
       </section>
     </div>
   );
-
-  const getSyncTitle = () => {
-    if (dbStatus === 'connected') return "Sincronizzato Cloud";
-    if (dbStatus === 'syncing') return "Sincronizzazione...";
-    return "Errore Cloud";
-  };
 
   return (
     <div className="min-h-screen bg-darksoft text-gray-100 font-sans pb-10 relative overflow-x-hidden">
@@ -545,13 +554,13 @@ export default function App() {
               </div>
             </div>
             <nav className="flex bg-[#1a1625]/80 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 shadow-xl">
-               <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white shadow-md' : 'text-gray-500 hover:text-white'}`}>
                  <Home size={16} /> Home
                </button>
-               <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white shadow-md' : 'text-gray-500 hover:text-white'}`}>
                  <PieChartIcon size={16} /> Analisi
                </button>
-               <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white shadow-md' : 'text-gray-500 hover:text-white'}`}>
                  <Settings size={16} /> Archivio
                </button>
             </nav>
@@ -583,7 +592,7 @@ export default function App() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Nota</label>
-                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
+                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Aggiungi una nota..." className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
                 </div>
                 <div className="pt-6">
                   <NeonButton onClick={handleSaveTransaction} fullWidth color={selectedCategory.colorName}>Conferma</NeonButton>
@@ -598,7 +607,7 @@ export default function App() {
             <div className="bg-red-950/20 border border-red-500/40 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl text-center">
                 <div className="bg-red-600 p-6 rounded-full text-white mx-auto mb-8 w-fit animate-pulse"><AlertTriangle size={48} /></div>
                 <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">RESET TOTALE?</h3>
-                <p className="text-red-200/60 text-sm mb-10">Tutte le transazioni verranno cancellate.</p>
+                <p className="text-red-200/60 text-sm mb-10">Tutte le transazioni verranno cancellate dal cloud e dal dispositivo.</p>
                 <div className="flex flex-col gap-3">
                   <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 py-5 rounded-2xl font-black uppercase text-xs transition-all">Annulla</button>
                   <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-red-600 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-red-600/30 transition-all">Sì, Svuota Tutto</button>
