@@ -44,12 +44,6 @@ const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
   { id: 'ass-auto', label: 'Assicurazione Auto', amount: 570, icon: '🛡️', colorName: 'blue', paidMonths: [], group: 'alternata' },
   { id: 'bollo-auto', label: 'Bollo Auto', amount: 150, icon: '🚗', colorName: 'red', paidMonths: [], group: 'alternata' },
   { id: 'ade-26-05', label: 'Agenzia Entrate', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-05-31' },
-  { id: 'ade-26-07', label: 'Agenzia Entrate', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-07-31' },
-  { id: 'ade-26-11', label: 'Agenzia Entrate', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2026-11-30' },
-  { id: 'ade-27-02', label: 'Agenzia Entrate', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-02-28' },
-  { id: 'ade-27-05', label: 'Agenzia Entrate', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-05-31' },
-  { id: 'ade-27-07', label: 'Agenzia Entrate', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-07-31' },
-  { id: 'ade-27-11', label: 'Agenzia Entrate', amount: 222.11, icon: '🏛️', colorName: 'red', paidMonths: [], group: 'alternata', dueDate: '2027-11-30' },
 ];
 
 const DEFAULT_CATEGORIES: CategoryConfig[] = [
@@ -67,8 +61,6 @@ const DEFAULT_CATEGORIES: CategoryConfig[] = [
 const COLORS = ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#6b7280'];
 const STORAGE_KEY = 'lillabudget_transactions';
 const FIXED_EXPENSES_KEY = 'lillabudget_fixed_expenses';
-
-// --- Sotto-Componenti ---
 
 const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: { 
   title: string, 
@@ -101,7 +93,7 @@ const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: {
   }
 
   return (
-    <div className={`bg-gradient-to-br ${bgGradient} backdrop-blur-md border ${borderColor} rounded-2xl p-5 flex flex-col items-center justify-center shadow-lg relative overflow-hidden transition-all ${highlight ? 'ring-1 ring-lilla-500/20' : ''}`}>
+    <div className={`bg-gradient-to-br ${bgGradient} backdrop-blur-md border ${borderColor} rounded-2xl p-5 flex flex-col items-center justify-center shadow-lg relative overflow-hidden transition-all ${highlight ? 'ring-1 ring-lilla-500/20 shadow-lilla-500/10' : ''}`}>
       <div className="absolute top-0 right-0 p-3 opacity-20">{icon}</div>
       <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-1">{title}</span>
       <span className={`text-xl md:text-2xl font-black ${textColor} drop-shadow-sm`}>{isVisible ? formatted : '••••••'}</span>
@@ -126,8 +118,6 @@ export default function App() {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [deleteFixedModalOpen, setDeleteFixedModalOpen] = useState(false);
   const [fixedToDelete, setFixedToDelete] = useState<string | null>(null);
-
-  // --- Logica Sincronizzazione ---
 
   const syncWithCloud = async () => {
     if (!process.env.DATABASE_URL) {
@@ -164,17 +154,14 @@ export default function App() {
     localStorage.setItem(FIXED_EXPENSES_KEY, JSON.stringify(fixedExpenses));
   }, [transactions, fixedExpenses]);
 
-  // --- Helpers ---
-
   const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
   const getMonthName = (d: Date) => new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' }).format(d);
+  
   const changeMonth = (inc: number) => { 
     const n = new Date(currentDate); 
     n.setMonth(n.getMonth() + inc); 
     setCurrentDate(n); 
   };
-
-  // --- Azioni ---
 
   const handleSaveTransaction = async () => {
     if (!amount || !selectedCategory) return;
@@ -231,8 +218,6 @@ export default function App() {
       setDbStatus('connected');
     }
   };
-
-  // --- Calcoli Budget ---
 
   const residue = useMemo(() => {
     const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -295,8 +280,6 @@ export default function App() {
 
   const hasUrgentDeadline = visibleFixed.some(f => f.dueDate && !f.paidMonths.includes(currentMonthKey));
 
-  // --- Rendering ---
-
   const renderHome = () => (
     <div className="space-y-8 animate-in fade-in pb-10">
       <div className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 shadow-lg mx-1">
@@ -358,7 +341,7 @@ export default function App() {
           </div>
 
           <div>
-            <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest border-b border-white/5 block mb-4 pb-1">Scadenze Straordinarie</span>
+            <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest border-b border-white/5 block mb-4 pb-1">Altre Scadenze</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {visibleFixed.filter(f => f.group !== 'mensile').map(fe => {
                 const p = fe.paidMonths.includes(currentMonthKey);
@@ -402,7 +385,7 @@ export default function App() {
             <tbody className="divide-y divide-white/5">
               {monthlyTrans.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento questo mese.</td>
+                  <td colSpan={5} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento registrato questo mese.</td>
                 </tr>
               ) : (
                 monthlyTrans.map(tx => {
@@ -423,7 +406,7 @@ export default function App() {
                         {tx.type === 'income' ? '+' : '-'}{tx.amount.toFixed(2)}€
                       </td>
                       <td className="py-4 px-4 text-right">
-                        <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 text-gray-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all transform hover:scale-110">
+                        <button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 text-gray-600 hover:text-rose-500 md:opacity-0 group-hover:opacity-100 transition-all transform hover:scale-110">
                           <Trash2 size={16} />
                         </button>
                       </td>
@@ -526,6 +509,12 @@ export default function App() {
     </div>
   );
 
+  const getSyncTitle = () => {
+    if (dbStatus === 'connected') return "Sincronizzato Cloud";
+    if (dbStatus === 'syncing') return "Sincronizzazione...";
+    return "Errore Cloud";
+  };
+
   return (
     <div className="min-h-screen bg-darksoft text-gray-100 font-sans pb-10 relative overflow-x-hidden">
        <div className="fixed inset-0 pointer-events-none z-0">
@@ -542,10 +531,14 @@ export default function App() {
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-lilla-300 leading-none">Fabia Budget</h1>
-                  <button onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} className="hover:scale-110 transition-transform active:rotate-180 duration-500">
-                    {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} title="Sincronizzato Cloud" />}
-                    {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} title="Sincronizzazione..." />}
-                    {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} title="Errore Cloud" />}
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} 
+                    className="hover:scale-110 transition-transform active:rotate-180 duration-500"
+                    title={getSyncTitle()}
+                  >
+                    {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} />}
+                    {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} />}
+                    {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} />}
                   </button>
                 </div>
                 <p className="text-[10px] text-lilla-400 font-black uppercase tracking-[0.25em] mt-1">Gestione Casa</p>
