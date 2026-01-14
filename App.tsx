@@ -127,7 +127,6 @@ export default function App() {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [deleteFixedModalOpen, setDeleteFixedModalOpen] = useState(false);
   const [fixedToDelete, setFixedToDelete] = useState<string | null>(null);
-
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
 
   const syncWithCloud = async () => {
@@ -140,34 +139,37 @@ export default function App() {
       await initDb();
       const cloudData = await fetchAllData();
       if (cloudData) {
-        setTransactions(cloudData.transactions);
+        if (cloudData.transactions) setTransactions(cloudData.transactions);
         if (cloudData.fixedExpenses && cloudData.fixedExpenses.length > 0) {
            setFixedExpenses(cloudData.fixedExpenses);
         }
         setDbStatus('connected');
-      } else {
-        setDbStatus('error');
       }
     } catch (err) {
-      console.error(err);
+      console.error("Errore critico durante syncWithCloud:", err);
       setDbStatus('error');
+      // Non blocchiamo l'app, rimaniamo con i dati locali
     }
   };
 
   useEffect(() => {
-    const localTx = localStorage.getItem(STORAGE_KEY);
-    const localFx = localStorage.getItem(FIXED_EXPENSES_KEY);
-    if (localTx) setTransactions(JSON.parse(localTx));
-    if (localFx) {
-       const parsed = JSON.parse(localFx);
-       if (parsed && parsed.length > 0) setFixedExpenses(parsed);
+    try {
+      const localTx = localStorage.getItem(STORAGE_KEY);
+      const localFx = localStorage.getItem(FIXED_EXPENSES_KEY);
+      if (localTx) setTransactions(JSON.parse(localTx));
+      if (localFx) {
+         const parsed = JSON.parse(localFx);
+         if (parsed && Array.isArray(parsed) && parsed.length > 0) setFixedExpenses(parsed);
+      }
+    } catch (e) {
+      console.warn("Errore lettura localStorage:", e);
     }
     syncWithCloud();
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
-    localStorage.setItem(FIXED_EXPENSES_KEY, JSON.stringify(fixedExpenses));
+    if (transactions.length > 0) localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
+    if (fixedExpenses.length > 0) localStorage.setItem(FIXED_EXPENSES_KEY, JSON.stringify(fixedExpenses));
   }, [transactions, fixedExpenses]);
 
   const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
@@ -234,23 +236,28 @@ export default function App() {
     });
 
     setDbStatus('syncing');
-    if (!isCurrentlyPaid) {
-      const newTx: Transaction = {
-        id: transactionId,
-        type: 'expense',
-        category: expense.label,
-        amount: expense.amount,
-        description: `Pagamento ${expense.label}`,
-        date: new Date().toISOString()
-      };
-      setTransactions(prev => [newTx, ...prev]);
-      await saveTransactionDb(newTx);
-    } else {
-      setTransactions(prev => prev.filter(t => t.id !== transactionId));
-      await deleteTransactionDb(transactionId);
+    try {
+      if (!isCurrentlyPaid) {
+        const newTx: Transaction = {
+          id: transactionId,
+          type: 'expense',
+          category: expense.label,
+          amount: expense.amount,
+          description: `Pagamento ${expense.label}`,
+          date: new Date().toISOString()
+        };
+        setTransactions(prev => [newTx, ...prev]);
+        await saveTransactionDb(newTx);
+      } else {
+        setTransactions(prev => prev.filter(t => t.id !== transactionId));
+        await deleteTransactionDb(transactionId);
+      }
+      if (updatedExpense) await saveFixedExpenseDb(updatedExpense);
+      setDbStatus('connected');
+    } catch (err) {
+      console.error("Errore durante togglePaidFixed:", err);
+      setDbStatus('error');
     }
-    if (updatedExpense) await saveFixedExpenseDb(updatedExpense);
-    setDbStatus('connected');
   };
 
   const notifications = useMemo(() => {
@@ -260,13 +267,10 @@ export default function App() {
 
     fixedExpenses.forEach(fe => {
       const isPaid = fe.paidMonths.includes(currentMonthKey);
-      
-      // Controllo scadenze fisse (AdE, Bollo, ecc.)
       if (fe.dueDate) {
         const dDate = new Date(fe.dueDate);
         dDate.setHours(0, 0, 0, 0);
         const diffDays = Math.ceil((dDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        
         if (!isPaid) {
           if (diffDays < 0) {
             alerts.push({ id: `alert-${fe.id}`, title: 'SCADUTO!', text: `${fe.label} del ${fe.dueDate.split('-').reverse().join('/')} non risulta pagato!`, type: 'critical', expenseId: fe.id });
@@ -274,13 +278,10 @@ export default function App() {
             alerts.push({ id: `alert-${fe.id}`, title: 'SCADENZA VICINA', text: `${fe.label} scade tra ${diffDays === 0 ? 'oggi' : diffDays + ' giorni'} (${fe.dueDate.split('-').reverse().join('/')})`, type: 'warning', expenseId: fe.id });
           }
         }
-      } 
-      // Controllo spese mensili non pagate (se siamo nella seconda metà del mese)
-      else if (!isPaid && fe.group === 'mensile' && today.getDate() > 10) {
+      } else if (!isPaid && fe.group === 'mensile' && today.getDate() > 10) {
         alerts.push({ id: `remind-${fe.id}`, title: 'PROMEMORIA', text: `Non hai ancora registrato il pagamento di ${fe.label} questo mese.`, type: 'info', expenseId: fe.id });
       }
     });
-
     return alerts;
   }, [fixedExpenses, currentMonthKey]);
 
@@ -300,7 +301,6 @@ export default function App() {
 
   const monthlyInc = monthlyTrans.filter(t => t.type === 'income').reduce((a, b) => a + b.amount, 0);
   const monthlyExp = monthlyTrans.filter(t => t.type === 'expense').reduce((a, b) => a + b.amount, 0);
-  
   const totalAvail = residue + monthlyInc;
   const currentBal = totalAvail - monthlyExp;
 
@@ -406,7 +406,7 @@ export default function App() {
 
       <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
-           <List className="text-lilla-400" size={20}/> Registro Movimenti (Tutte le Operazioni)
+           <List className="text-lilla-400" size={20}/> Registro Movimenti
         </h2>
         <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
           <table className="w-full text-left text-sm border-collapse">
@@ -522,7 +522,6 @@ export default function App() {
             </nav>
           </header>
 
-          {/* Notif Panel Overlay */}
           {notifPanelOpen && (
             <div className="absolute right-4 top-24 z-[90] w-full max-w-xs animate-in slide-in-from-top-4 fade-in duration-300">
                <div className="bg-[#1a1625]/90 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl">

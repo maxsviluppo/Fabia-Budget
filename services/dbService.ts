@@ -7,9 +7,10 @@ const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
 export const initDb = async () => {
   if (!sql) return;
   try {
+    // Cambiato ID in TEXT per supportare sia UUID che stringhe custom come "pay-mutuo-..."
     await sql`
       CREATE TABLE IF NOT EXISTS transactions (
-        id UUID PRIMARY KEY,
+        id TEXT PRIMARY KEY,
         type VARCHAR(10) NOT NULL,
         category TEXT NOT NULL,
         amount DECIMAL(12,2) NOT NULL,
@@ -41,21 +42,21 @@ export const fetchAllData = async () => {
     const fxs = await sql`SELECT * FROM fixed_expenses`;
     
     return {
-      transactions: txs.map(t => ({
+      transactions: (txs || []).map(t => ({
         ...t,
-        amount: parseFloat(t.amount.toString()),
-        date: new Date(t.date).toISOString()
+        amount: t.amount ? parseFloat(t.amount.toString()) : 0,
+        date: t.date ? new Date(t.date).toISOString() : new Date().toISOString()
       })) as Transaction[],
-      fixedExpenses: fxs.map(f => ({
+      fixedExpenses: (fxs || []).map(f => ({
         ...f,
-        amount: parseFloat(f.amount.toString()),
+        amount: f.amount ? parseFloat(f.amount.toString()) : 0,
         group: f.group_type,
         dueDate: f.due_date ? new Date(f.due_date).toISOString().split('T')[0] : undefined
       })) as FixedExpense[]
     };
   } catch (err) {
     console.error("Errore fetching dati:", err);
-    return null;
+    throw err; // Rilanciamo per permettere all'app di gestire l'errore
   }
 };
 
@@ -99,10 +100,18 @@ export const saveFixedExpenseDb = async (f: FixedExpense) => {
 
 export const deleteTransactionDb = async (id: string) => {
   if (!sql) return;
-  await sql`DELETE FROM transactions WHERE id = ${id}`;
+  try {
+    await sql`DELETE FROM transactions WHERE id = ${id}`;
+  } catch (err) {
+    console.error("Errore eliminazione transazione:", err);
+  }
 };
 
 export const deleteFixedExpenseDb = async (id: string) => {
   if (!sql) return;
-  await sql`DELETE FROM fixed_expenses WHERE id = ${id}`;
+  try {
+    await sql`DELETE FROM fixed_expenses WHERE id = ${id}`;
+  } catch (err) {
+    console.error("Errore eliminazione spesa fissa:", err);
+  }
 };
