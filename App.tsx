@@ -1,29 +1,31 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Home, 
   PieChart as PieChartIcon, 
   Trash2, 
-  ArrowUpCircle,
-  ArrowDownCircle, 
   X, 
   Wallet, 
   TrendingUp, 
   TrendingDown, 
   Settings, 
-  UserCircle, 
   CheckCircle2, 
-  Plus, 
   AlertTriangle, 
   ChevronLeft, 
   ChevronRight, 
   Check, 
   CreditCard,
-  AlertCircle
+  AlertCircle,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  ArrowDownCircle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 import { Transaction, CategoryConfig, DefaultCategoryIds, ButtonColor, FixedExpense } from './types';
 import NeonButton from './components/NeonButton';
+import { initDb, fetchAllData, saveTransactionDb, saveFixedExpenseDb, deleteTransactionDb, deleteFixedExpenseDb } from './services/dbService';
 
 // --- Costanti ---
 
@@ -64,8 +66,6 @@ const DEFAULT_CATEGORIES: CategoryConfig[] = [
 const COLORS = ['#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#6b7280'];
 
 const STORAGE_KEY = 'lillabudget_transactions';
-const USER_NAME_KEY = 'lillabudget_username';
-const CATEGORIES_KEY = 'lillabudget_categories';
 const FIXED_EXPENSES_KEY = 'lillabudget_fixed_expenses';
 
 const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: { 
@@ -113,10 +113,9 @@ const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: {
 export default function App() {
   const [view, setView] = useState<'home' | 'reports' | 'settings'>('home');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<CategoryConfig[]>(DEFAULT_CATEGORIES);
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>(DEFAULT_FIXED_EXPENSES);
-  const [userName, setUserName] = useState('Famiglia');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [dbStatus, setDbStatus] = useState<'connected' | 'syncing' | 'error' | 'idle'>('idle');
 
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<CategoryConfig | null>(null);
@@ -128,31 +127,38 @@ export default function App() {
   const [deleteFixedModalOpen, setDeleteFixedModalOpen] = useState(false);
   const [fixedToDelete, setFixedToDelete] = useState<string | null>(null);
 
+  // --- Inizializzazione e Sincronizzazione Cloud ---
   useEffect(() => {
-    const sTx = localStorage.getItem(STORAGE_KEY);
-    const sUs = localStorage.getItem(USER_NAME_KEY);
-    const sCt = localStorage.getItem(CATEGORIES_KEY);
-    const sFx = localStorage.getItem(FIXED_EXPENSES_KEY);
-    
-    if (sTx) setTransactions(JSON.parse(sTx));
-    if (sUs) setUserName(sUs);
-    if (sCt) setCategories(JSON.parse(sCt));
-    
-    if (sFx) {
-      const stored = JSON.parse(sFx) as FixedExpense[];
-      const missingAde = DEFAULT_FIXED_EXPENSES.filter(df => df.id.startsWith('ade-') && !stored.some(s => s.id === df.id));
-      setFixedExpenses([...stored, ...missingAde]);
-    } else {
-      setFixedExpenses(DEFAULT_FIXED_EXPENSES);
-    }
+    const loadInitialData = async () => {
+      // 1. Carica da localStorage per velocità
+      const sTx = localStorage.getItem(STORAGE_KEY);
+      const sFx = localStorage.getItem(FIXED_EXPENSES_KEY);
+      if (sTx) setTransactions(JSON.parse(sTx));
+      if (sFx) setFixedExpenses(JSON.parse(sFx));
+
+      // 2. Prova a inizializzare e scaricare da Neon
+      if (process.env.DATABASE_URL) {
+        setDbStatus('syncing');
+        await initDb();
+        const cloudData = await fetchAllData();
+        if (cloudData) {
+          setTransactions(cloudData.transactions);
+          setFixedExpenses(cloudData.fixedExpenses);
+          setDbStatus('connected');
+        } else {
+          setDbStatus('error');
+        }
+      }
+    };
+
+    loadInitialData();
   }, []);
 
+  // --- Persistenza locale ---
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
-    localStorage.setItem(USER_NAME_KEY, userName);
-    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
     localStorage.setItem(FIXED_EXPENSES_KEY, JSON.stringify(fixedExpenses));
-  }, [transactions, userName, categories, fixedExpenses]);
+  }, [transactions, fixedExpenses]);
 
   const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
   const getMonthName = (d: Date) => new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' }).format(d);
@@ -163,34 +169,52 @@ export default function App() {
     setCurrentDate(n); 
   };
 
-  const handleSaveTransaction = () => {
+  const handleSaveTransaction = async () => {
     if (!amount || !selectedCategory) return;
     const v = parseFloat(amount);
     if (isNaN(v)) return;
-    setTransactions(prev => [{ 
+
+    const newTx: Transaction = { 
       id: crypto.randomUUID(), 
       type: selectedCategory.type, 
       category: selectedCategory.id, 
       amount: v, 
       description, 
       date 
-    }, ...prev]);
+    };
+
+    setTransactions(prev => [newTx, ...prev]);
     setTxModalOpen(false);
+
+    // Salva su Cloud
+    setDbStatus('syncing');
+    await saveTransactionDb(newTx);
+    setDbStatus('connected');
   };
 
-  const togglePaidFixed = (id: string) => {
+  const togglePaidFixed = async (id: string) => {
+    let updatedExpense: FixedExpense | null = null;
+
     setFixedExpenses(prev => prev.map(fe => {
       if (fe.id === id) {
         const isPaid = fe.paidMonths.includes(currentMonthKey);
-        return { 
+        updatedExpense = { 
           ...fe, 
           paidMonths: isPaid 
             ? fe.paidMonths.filter(m => m !== currentMonthKey) 
             : [...fe.paidMonths, currentMonthKey] 
         };
+        return updatedExpense;
       } 
       return fe;
     }));
+
+    // Salva su Cloud
+    if (updatedExpense) {
+      setDbStatus('syncing');
+      await saveFixedExpenseDb(updatedExpense);
+      setDbStatus('connected');
+    }
   };
 
   const residue = useMemo(() => {
@@ -226,7 +250,7 @@ export default function App() {
     const counts: Record<string, number> = {};
     monthlyTrans.forEach(tx => {
       if (tx.type === 'expense') {
-        const cat = categories.find(c => c.id === tx.category);
+        const cat = DEFAULT_CATEGORIES.find(c => c.id === tx.category);
         const label = cat ? cat.label : 'Altro';
         counts[label] = (counts[label] || 0) + tx.amount;
       }
@@ -237,7 +261,7 @@ export default function App() {
       }
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [monthlyTrans, fixedExpenses, currentMonthKey, categories]);
+  }, [monthlyTrans, fixedExpenses, currentMonthKey]);
 
   const monthlyData = useMemo(() => [
     { name: 'Disponibile', amount: totalAvail },
@@ -330,7 +354,7 @@ export default function App() {
                   <button 
                     key={fe.id} 
                     onClick={() => togglePaidFixed(fe.id)} 
-                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${isFiscal ? (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-red-600/10 border-red-500/60 shadow-lg shadow-red-500/10') : (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30')}`}
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${isFiscal ? (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-red-600/10 border-red-500/60 shadow-lg shadow-red-500/10') : (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}
                   >
                     {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-red-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Rata Fiscali</span>}
                     <div className="flex items-center gap-2 min-w-0">
@@ -356,7 +380,7 @@ export default function App() {
             <ArrowDownCircle className="text-rose-400" /> Movimenti Extra
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-              {categories.map(cat => (
+              {DEFAULT_CATEGORIES.map(cat => (
                 <NeonButton key={cat.id} onClick={() => { setSelectedCategory(cat); setTxModalOpen(true); }} color={cat.colorName} square>
                   <span className="text-4xl">{cat.icon}</span>
                   <span className="text-xs font-bold mt-2 uppercase">{cat.label}</span>
@@ -455,7 +479,12 @@ export default function App() {
                 <Wallet size={28} />
               </div>
               <div className="flex flex-col">
-                <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-lilla-300 leading-none">Fabia Budget</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-lilla-300 leading-none">Fabia Budget</h1>
+                  {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} />}
+                  {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} />}
+                  {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} />}
+                </div>
                 <p className="text-[10px] text-lilla-400 font-black uppercase tracking-[0.25em] mt-1">Gestione Casa</p>
               </div>
             </div>
@@ -531,7 +560,14 @@ export default function App() {
                   <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 hover:bg-white/10 py-5 rounded-2xl font-black uppercase text-xs transition-all">
                     Annulla
                   </button>
-                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-red-600 hover:bg-red-700 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-red-600/30 transition-all">
+                  <button 
+                    onClick={async () => { 
+                      localStorage.clear(); 
+                      // Potrebbe essere utile un comando di pulizia DB qui
+                      window.location.reload(); 
+                    }} 
+                    className="w-full bg-red-600 hover:bg-red-700 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-red-600/30 transition-all"
+                  >
                     Sì, Svuota Tutto
                   </button>
                 </div>
@@ -550,9 +586,10 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <button onClick={() => setDeleteFixedModalOpen(false)} className="bg-white/5 hover:bg-white/10 py-4 rounded-2xl font-black uppercase text-xs tracking-widest transition-all">No</button>
                   <button 
-                    onClick={() => {
+                    onClick={async () => {
                       if (fixedToDelete) {
                         setFixedExpenses(prev => prev.filter(f => f.id !== fixedToDelete));
+                        await deleteFixedExpenseDb(fixedToDelete);
                         setDeleteFixedModalOpen(false);
                         setFixedToDelete(null);
                       }

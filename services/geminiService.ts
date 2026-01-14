@@ -2,18 +2,14 @@
 import { GoogleGenAI } from "@google/genai";
 import { Transaction } from "../types";
 
-// In Vite, process.env.API_KEY è reso disponibile tramite la configurazione 'define'
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-
 export const getFinancialAdvice = async (transactions: Transaction[]): Promise<string> => {
   try {
     if (transactions.length === 0) {
       return "Non ci sono ancora abbastanza dati per generare un report. Aggiungi alcune spese o entrate!";
     }
 
-    if (!process.env.API_KEY) {
-      return "Configurazione AI incompleta. Aggiungi una chiave API per ricevere consigli.";
-    }
+    // Initialize GoogleGenAI inside the function using process.env.API_KEY directly
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const recentTransactions = transactions.slice(0, 50);
     const dataString = JSON.stringify(recentTransactions.map(t => ({
@@ -24,7 +20,8 @@ export const getFinancialAdvice = async (transactions: Transaction[]): Promise<s
       desc: t.description
     })));
 
-    const model = 'gemini-3-flash-preview';
+    // Use gemini-3-flash-preview for basic text tasks like summarization
+    const modelName = 'gemini-3-flash-preview';
     const prompt = `
       Sei un assistente finanziario personale gentile e intelligente per una famiglia.
       Analizza le seguenti transazioni (JSON):
@@ -38,11 +35,13 @@ export const getFinancialAdvice = async (transactions: Transaction[]): Promise<s
       Non usare formattazione Markdown complessa, solo testo semplice e paragrafi.
     `;
 
+    // Calling generateContent with both model name and prompt as per guidelines
     const response = await ai.models.generateContent({
-      model: model,
+      model: modelName,
       contents: prompt,
     });
 
+    // Access the text property directly (not a method)
     return response.text || "Non sono riuscito a generare un consiglio al momento.";
   } catch (error) {
     console.error("Error fetching Gemini advice:", error);
