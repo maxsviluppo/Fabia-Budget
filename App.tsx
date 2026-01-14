@@ -137,7 +137,6 @@ export default function App() {
       const cloudData = await fetchAllData();
       if (cloudData) {
         setTransactions(cloudData.transactions);
-        // Evitiamo di sovrascrivere con array vuoto se il cloud è appena stato resettato
         if (cloudData.fixedExpenses && cloudData.fixedExpenses.length > 0) {
            setFixedExpenses(cloudData.fixedExpenses);
         }
@@ -208,14 +207,20 @@ export default function App() {
   };
 
   const togglePaidFixed = async (id: string) => {
+    const expense = fixedExpenses.find(fe => fe.id === id);
+    if (!expense) return;
+
+    const isCurrentlyPaid = expense.paidMonths.includes(currentMonthKey);
+    const transactionId = `pay-${id}-${currentMonthKey}`;
+    
+    // 1. Aggiorniamo lo stato locale delle spese fisse
     let updatedExpense: FixedExpense | null = null;
     setFixedExpenses(prev => {
       return prev.map(fe => {
         if (fe.id === id) {
-          const isPaid = fe.paidMonths.includes(currentMonthKey);
           updatedExpense = { 
             ...fe, 
-            paidMonths: isPaid 
+            paidMonths: isCurrentlyPaid 
               ? fe.paidMonths.filter(m => m !== currentMonthKey) 
               : [...fe.paidMonths, currentMonthKey] 
           };
@@ -225,26 +230,41 @@ export default function App() {
       });
     });
 
-    if (updatedExpense) {
-      setDbStatus('syncing');
-      await saveFixedExpenseDb(updatedExpense);
-      setDbStatus('connected');
+    setDbStatus('syncing');
+
+    if (!isCurrentlyPaid) {
+      // REGISTRAZIONE: Se stiamo segnando come pagata, creiamo una transazione
+      const newTx: Transaction = {
+        id: transactionId,
+        type: 'expense',
+        category: expense.label, // Usiamo l'etichetta come categoria
+        amount: expense.amount,
+        description: `Pagamento ${expense.label}`,
+        date: new Date().toISOString()
+      };
+      
+      setTransactions(prev => [newTx, ...prev]);
+      await saveTransactionDb(newTx);
+    } else {
+      // CANCELLAZIONE: Se stiamo togliendo la spunta, eliminiamo la transazione
+      setTransactions(prev => prev.filter(t => t.id !== transactionId));
+      await deleteTransactionDb(transactionId);
     }
+
+    if (updatedExpense) {
+      await saveFixedExpenseDb(updatedExpense);
+    }
+    
+    setDbStatus('connected');
   };
 
   const residue = useMemo(() => {
     const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const pastManual = transactions
+    // Residuo = Somma storica di tutte le transazioni prima di questo mese
+    return transactions
       .filter(t => new Date(t.date) < start)
       .reduce((acc, t) => t.type === 'income' ? acc + t.amount : acc - t.amount, 0);
-    
-    let pastFixed = 0;
-    fixedExpenses.forEach(fe => fe.paidMonths.forEach(m => {
-      const [y, mm] = m.split('-').map(Number); 
-      if (new Date(y, mm - 1, 1) < start) pastFixed += fe.amount;
-    }));
-    return pastManual - pastFixed;
-  }, [transactions, fixedExpenses, currentDate]);
+  }, [transactions, currentDate]);
 
   const monthlyTrans = useMemo(() => {
     return transactions.filter(t => {
@@ -254,35 +274,26 @@ export default function App() {
   }, [transactions, currentDate]);
 
   const monthlyInc = monthlyTrans.filter(t => t.type === 'income').reduce((a, b) => a + b.amount, 0);
-  const monthlyManExp = monthlyTrans.filter(t => t.type === 'expense').reduce((a, b) => a + b.amount, 0);
-  const monthlyFixPaid = fixedExpenses
-    .filter(fe => fe.paidMonths.includes(currentMonthKey))
-    .reduce((a, b) => a + b.amount, 0);
+  const monthlyExp = monthlyTrans.filter(t => t.type === 'expense').reduce((a, b) => a + b.amount, 0);
   
   const totalAvail = residue + monthlyInc;
-  const actualSpent = monthlyManExp + monthlyFixPaid;
-  const currentBal = totalAvail - actualSpent;
+  const currentBal = totalAvail - monthlyExp;
 
   const expensesByCategory = useMemo(() => {
     const counts: Record<string, number> = {};
     monthlyTrans.forEach(tx => {
       if (tx.type === 'expense') {
         const cat = DEFAULT_CATEGORIES.find(c => c.id === tx.category);
-        const label = cat ? cat.label : 'Altro';
+        const label = cat ? cat.label : tx.category; // Se è una fissa, tx.category è il label della fissa
         counts[label] = (counts[label] || 0) + tx.amount;
       }
     });
-    fixedExpenses.forEach(fe => {
-      if (fe.paidMonths.includes(currentMonthKey)) {
-        counts[fe.label] = (counts[fe.label] || 0) + fe.amount;
-      }
-    });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [monthlyTrans, fixedExpenses, currentMonthKey]);
+  }, [monthlyTrans]);
 
   const monthlyData = [
     { name: 'Disponibile', amount: totalAvail },
-    { name: 'Speso', amount: actualSpent }
+    { name: 'Speso', amount: monthlyExp }
   ];
 
   const visibleFixed = fixedExpenses.filter(fe => {
@@ -292,12 +303,6 @@ export default function App() {
   });
 
   const hasUrgentDeadline = visibleFixed.some(f => f.dueDate && !f.paidMonths.includes(currentMonthKey));
-
-  const getSyncStatusText = () => {
-    if (dbStatus === 'connected') return "Sincronizzato";
-    if (dbStatus === 'syncing') return "In corso...";
-    return "Offline";
-  };
 
   const renderHome = () => (
     <div className="space-y-8 animate-in fade-in pb-10">
@@ -326,8 +331,8 @@ export default function App() {
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard title="Entrate + Residuo" amount={totalAvail} type="income" isVisible={true} subtitle={`Residuo: ${residue.toFixed(2)}€`} />
-        <StatCard title="Speso nel Mese" amount={actualSpent} type="expense" isVisible={true} subtitle="Spunte + Extra" />
-        <StatCard title="Budget Attuale" amount={currentBal} type="total" isVisible={true} highlight subtitle="Rimasto ad oggi" />
+        <StatCard title="Uscite Totali" amount={monthlyExp} type="expense" isVisible={true} subtitle="Fisse + Extra" />
+        <StatCard title="Budget Attuale" amount={currentBal} type="total" isVisible={true} highlight subtitle="Soldi rimasti oggi" />
       </section>
 
       <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
@@ -342,7 +347,7 @@ export default function App() {
               {visibleFixed.filter(f => f.group === 'mensile').map(fe => {
                 const p = fe.paidMonths.includes(currentMonthKey);
                 return (
-                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}>
+                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40 shadow-inner' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}>
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl">{fe.icon}</span>
                       <div className="text-left">
@@ -350,7 +355,7 @@ export default function App() {
                         <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${p ? 'bg-emerald-500 text-white' : 'bg-white/10 text-gray-600'}`}>
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${p ? 'bg-emerald-500 text-white' : 'bg-white/10 text-gray-600'}`}>
                       {p && <Check size={12} strokeWidth={4} />}
                     </div>
                   </button>
@@ -375,7 +380,7 @@ export default function App() {
                           <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${p ? 'bg-emerald-500 text-white' : 'bg-white/10'}`}>
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${p ? 'bg-emerald-500 text-white' : 'bg-white/10'}`}>
                       {p && <Check size={12} strokeWidth={4} />}
                     </div>
                   </button>
@@ -388,14 +393,14 @@ export default function App() {
 
       <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
-           <List className="text-lilla-400" size={20}/> Registro Movimenti Extra
+           <List className="text-lilla-400" size={20}/> Registro Movimenti (Tutte le Operazioni)
         </h2>
         <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
           <table className="w-full text-left text-sm border-collapse">
             <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10">
               <tr>
                 <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Data</th>
-                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Categoria</th>
+                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Operazione / Categoria</th>
                 <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Importo</th>
                 <th className="py-3 px-4 w-10"></th>
               </tr>
@@ -403,11 +408,12 @@ export default function App() {
             <tbody className="divide-y divide-white/5">
               {monthlyTrans.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento registrato.</td>
+                  <td colSpan={4} className="py-12 text-center text-gray-500 italic font-medium">Nessuna operazione registrata questo mese.</td>
                 </tr>
               ) : (
                 monthlyTrans.map(tx => {
                   const cat = DEFAULT_CATEGORIES.find(c => c.id === tx.category);
+                  const isFixedPay = tx.id.startsWith('pay-');
                   return (
                     <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
                       <td className="py-4 px-4 text-xs font-bold text-gray-400 whitespace-nowrap">
@@ -415,8 +421,11 @@ export default function App() {
                       </td>
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg">{cat?.icon || '💰'}</span>
-                          <span className="font-bold text-gray-200">{cat?.label || tx.category}</span>
+                          <span className="text-lg">{cat?.icon || (isFixedPay ? '✅' : '💰')}</span>
+                          <div className="flex flex-col">
+                             <span className="font-bold text-gray-200">{cat?.label || tx.category}</span>
+                             {isFixedPay && <span className="text-[9px] text-emerald-500 uppercase font-black">Spesa Fissa</span>}
+                          </div>
                         </div>
                       </td>
                       <td className={`py-4 px-4 text-right font-black ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -438,7 +447,7 @@ export default function App() {
 
       <section className="space-y-6">
           <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black mb-4 flex items-center gap-3">
-            <ArrowDownCircle className="text-rose-400" /> Aggiungi Movimento
+            <ArrowDownCircle className="text-rose-400" /> Aggiungi Movimento Extra
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
               {DEFAULT_CATEGORIES.map(cat => (
@@ -456,7 +465,7 @@ export default function App() {
     <div className="space-y-8 animate-in slide-in-from-right px-1">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
-            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Analisi Categorie</h3>
+            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Spese per Voce</h3>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -470,7 +479,7 @@ export default function App() {
             </div>
           </div>
           <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
-            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Riepilogo Mensile</h3>
+            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Riepilogo Disponibilità</h3>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData}>
@@ -493,7 +502,7 @@ export default function App() {
     <div className="space-y-8 max-w-2xl mx-auto pb-10 px-1">
       <section className="bg-[#1a1625] rounded-3xl p-8 shadow-xl border border-white/5">
          <h2 className="text-xl font-black text-white mb-6 flex items-center gap-3 uppercase tracking-tight">
-           <CreditCard className="text-blue-600" /> Piano Spese Fisse
+           <CreditCard className="text-blue-600" /> Piano Scadenze
          </h2>
          <div className="space-y-3">
             {fixedExpenses.sort((a,b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999')).map(fe => (
@@ -545,7 +554,7 @@ export default function App() {
                   <button 
                     onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} 
                     className="hover:scale-110 transition-transform active:rotate-180 duration-500"
-                    title={getSyncStatusText()}
+                    title={dbStatus === 'connected' ? "Sincronizzato" : "In corso..."}
                   >
                     {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} />}
                     {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} />}
