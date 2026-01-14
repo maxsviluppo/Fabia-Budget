@@ -7,7 +7,6 @@ const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
 export const initDb = async () => {
   if (!sql) return;
   try {
-    // Usiamo TEXT per ID per supportare ID deterministici (es. pay-mutuo-...)
     await sql`
       CREATE TABLE IF NOT EXISTS transactions (
         id TEXT PRIMARY KEY,
@@ -31,7 +30,7 @@ export const initDb = async () => {
       );
     `;
   } catch (err) {
-    console.error("Errore inizializzazione DB:", err);
+    console.error("Errore initDb:", err);
   }
 };
 
@@ -55,9 +54,9 @@ export const fetchAllData = async () => {
         label: String(f.label),
         amount: f.amount ? parseFloat(f.amount.toString()) : 0,
         icon: f.icon || '💰',
-        colorName: f.color_name as any,
+        colorName: (f.color_name || 'purple') as any,
         paidMonths: Array.isArray(f.paid_months) ? f.paid_months : [],
-        group: f.group_type as any,
+        group: (f.group_type || 'mensile') as any,
         dueDate: f.due_date ? new Date(f.due_date).toISOString().split('T')[0] : undefined
       })) as FixedExpense[]
     };
