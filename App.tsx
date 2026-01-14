@@ -137,7 +137,10 @@ export default function App() {
       const cloudData = await fetchAllData();
       if (cloudData) {
         setTransactions(cloudData.transactions);
-        setFixedExpenses(cloudData.fixedExpenses);
+        // Evitiamo di sovrascrivere con array vuoto se il cloud è appena stato resettato
+        if (cloudData.fixedExpenses && cloudData.fixedExpenses.length > 0) {
+           setFixedExpenses(cloudData.fixedExpenses);
+        }
         setDbStatus('connected');
       } else {
         setDbStatus('error');
@@ -152,7 +155,10 @@ export default function App() {
     const localTx = localStorage.getItem(STORAGE_KEY);
     const localFx = localStorage.getItem(FIXED_EXPENSES_KEY);
     if (localTx) setTransactions(JSON.parse(localTx));
-    if (localFx) setFixedExpenses(JSON.parse(localFx));
+    if (localFx) {
+       const parsed = JSON.parse(localFx);
+       if (parsed && parsed.length > 0) setFixedExpenses(parsed);
+    }
     syncWithCloud();
   }, []);
 
@@ -287,15 +293,21 @@ export default function App() {
 
   const hasUrgentDeadline = visibleFixed.some(f => f.dueDate && !f.paidMonths.includes(currentMonthKey));
 
+  const getSyncStatusText = () => {
+    if (dbStatus === 'connected') return "Sincronizzato";
+    if (dbStatus === 'syncing') return "In corso...";
+    return "Offline";
+  };
+
   const renderHome = () => (
     <div className="space-y-8 animate-in fade-in pb-10">
       <div className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 shadow-lg mx-1">
         <button onClick={() => changeMonth(-1)} className="p-2 text-lilla-400 hover:text-white transition-colors">
           <ChevronLeft size={24} />
         </button>
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Periodo Gestione</span>
-          <span className="text-lg font-black text-white capitalize">{getMonthName(currentDate)}</span>
+        <div className="flex flex-col items-center text-center">
+          <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Mese in Gestione</span>
+          <span className="text-lg font-black text-white capitalize leading-none">{getMonthName(currentDate)}</span>
         </div>
         <button onClick={() => changeMonth(1)} className="p-2 text-lilla-400 hover:text-white transition-colors">
           <ChevronRight size={24} />
@@ -303,11 +315,11 @@ export default function App() {
       </div>
 
       {hasUrgentDeadline && (
-        <div className="mx-1 bg-red-600/20 border border-red-500/50 rounded-2xl p-4 flex items-center gap-4 animate-pulse">
-           <AlertCircle className="text-red-500 shrink-0" size={32} />
+        <div className="mx-1 bg-rose-600/20 border border-rose-500/50 rounded-2xl p-4 flex items-center gap-4 animate-pulse">
+           <AlertCircle className="text-rose-500 shrink-0" size={32} />
            <div>
-             <p className="text-red-100 font-black uppercase text-xs tracking-tighter">Scadenza Fiscale!</p>
-             <p className="text-red-200/70 text-[10px] font-bold">Hai una rata in scadenza questo mese.</p>
+             <p className="text-rose-100 font-black uppercase text-xs tracking-tighter">Scadenza Imminente!</p>
+             <p className="text-rose-200/70 text-[10px] font-bold">Hai una rata fiscale in scadenza questo mese.</p>
            </div>
         </div>
       )}
@@ -325,16 +337,12 @@ export default function App() {
         
         <div className="space-y-8">
           <div>
-            <span className="text-[10px] font-black uppercase text-lilla-400 tracking-widest border-b border-white/5 block mb-4 pb-1">Fisse Ricorrenti</span>
+            <span className="text-[10px] font-black uppercase text-lilla-400 tracking-widest border-b border-white/5 block mb-4 pb-1">Uscite Ricorrenti</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {visibleFixed.filter(f => f.group === 'mensile').map(fe => {
                 const p = fe.paidMonths.includes(currentMonthKey);
                 return (
-                  <button 
-                    key={fe.id} 
-                    onClick={() => togglePaidFixed(fe.id)} 
-                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}
-                  >
+                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}>
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl">{fe.icon}</span>
                       <div className="text-left">
@@ -352,22 +360,18 @@ export default function App() {
           </div>
 
           <div>
-            <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest border-b border-white/5 block mb-4 pb-1">Straordinarie & Scadenze</span>
+            <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest border-b border-white/5 block mb-4 pb-1">Straordinarie & AdE</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {visibleFixed.filter(f => f.group !== 'mensile').map(fe => {
                 const p = fe.paidMonths.includes(currentMonthKey);
                 const isFiscal = !!fe.dueDate;
                 return (
-                  <button 
-                    key={fe.id} 
-                    onClick={() => togglePaidFixed(fe.id)} 
-                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${isFiscal ? (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-red-600/10 border-red-500/60 shadow-lg shadow-red-500/10') : (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30')}`}
-                  >
-                    {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-red-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Scadenza</span>}
+                  <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${isFiscal ? (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-rose-600/10 border-rose-500/60 shadow-lg shadow-rose-500/10') : (p ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-lilla-500/30')}`}>
+                    {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-rose-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Rata</span>}
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xl">{fe.icon}</span>
                       <div className="text-left">
-                          <p className={`font-bold text-xs truncate ${p ? 'text-emerald-300' : (isFiscal ? 'text-red-400' : 'text-gray-200')}`}>{fe.label}</p>
+                          <p className={`font-bold text-xs truncate ${p ? 'text-emerald-300' : (isFiscal ? 'text-rose-400' : 'text-gray-200')}`}>{fe.label}</p>
                           <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
                       </div>
                     </div>
@@ -399,7 +403,7 @@ export default function App() {
             <tbody className="divide-y divide-white/5">
               {monthlyTrans.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento manuale.</td>
+                  <td colSpan={4} className="py-12 text-center text-gray-500 italic font-medium">Nessun movimento registrato.</td>
                 </tr>
               ) : (
                 monthlyTrans.map(tx => {
@@ -434,7 +438,7 @@ export default function App() {
 
       <section className="space-y-6">
           <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black mb-4 flex items-center gap-3">
-            <ArrowDownCircle className="text-rose-400" /> Registra Movimento
+            <ArrowDownCircle className="text-rose-400" /> Aggiungi Movimento
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
               {DEFAULT_CATEGORIES.map(cat => (
@@ -452,7 +456,7 @@ export default function App() {
     <div className="space-y-8 animate-in slide-in-from-right px-1">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
-            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Spese per Categoria</h3>
+            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Analisi Categorie</h3>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -466,7 +470,7 @@ export default function App() {
             </div>
           </div>
           <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
-            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Entrate vs Uscite</h3>
+            <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Riepilogo Mensile</h3>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData}>
@@ -489,7 +493,7 @@ export default function App() {
     <div className="space-y-8 max-w-2xl mx-auto pb-10 px-1">
       <section className="bg-[#1a1625] rounded-3xl p-8 shadow-xl border border-white/5">
          <h2 className="text-xl font-black text-white mb-6 flex items-center gap-3 uppercase tracking-tight">
-           <CreditCard className="text-blue-600" /> Archivio Piano Fisse
+           <CreditCard className="text-blue-600" /> Piano Spese Fisse
          </h2>
          <div className="space-y-3">
             {fixedExpenses.sort((a,b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999')).map(fe => (
@@ -499,7 +503,7 @@ export default function App() {
                   <div>
                     <span className="font-black text-gray-100 block text-sm">
                         {fe.label} 
-                        {fe.dueDate && <span className="text-[8px] bg-red-600 text-white px-1.5 py-0.5 rounded-full uppercase ml-1">{fe.dueDate.split('-').reverse().join('/')}</span>}
+                        {fe.dueDate && <span className="text-[8px] bg-rose-600 text-white px-1.5 py-0.5 rounded-full uppercase ml-1">{fe.dueDate.split('-').reverse().join('/')}</span>}
                     </span>
                     <span className="text-[10px] text-gray-500 font-black uppercase">{fe.amount.toFixed(2)}€</span>
                   </div>
@@ -512,10 +516,10 @@ export default function App() {
          </div>
       </section>
 
-      <section className="bg-red-950/10 border border-red-500/20 rounded-3xl p-8 shadow-xl text-center">
-        <h2 className="text-lg font-black text-white mb-6 uppercase tracking-tight">Manutenzione Sistema</h2>
+      <section className="bg-rose-950/10 border border-rose-500/20 rounded-3xl p-8 shadow-xl text-center">
+        <h2 className="text-lg font-black text-white mb-6 uppercase tracking-tight">Manutenzione Dati</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button onClick={() => setResetModalOpen(true)} className="w-full bg-red-600/20 border border-red-500/30 text-red-100 font-black py-4 rounded-xl uppercase text-xs hover:bg-red-600/30 transition-all">Svuota Dati</button>
+            <button onClick={() => setResetModalOpen(true)} className="w-full bg-rose-600/20 border border-rose-500/30 text-rose-100 font-black py-4 rounded-xl uppercase text-xs hover:bg-rose-600/30 transition-all">Svuota Archivio</button>
             <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-white/5 border border-white/10 text-gray-400 font-black py-4 rounded-xl uppercase text-xs hover:bg-white/10 transition-all">Reset Cache</button>
         </div>
       </section>
@@ -541,7 +545,7 @@ export default function App() {
                   <button 
                     onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} 
                     className="hover:scale-110 transition-transform active:rotate-180 duration-500"
-                    title={dbStatus === 'connected' ? "Sincronizzato" : (dbStatus === 'syncing' ? "In corso..." : "Errore Cloud")}
+                    title={getSyncStatusText()}
                   >
                     {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} />}
                     {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} />}
@@ -552,13 +556,13 @@ export default function App() {
               </div>
             </div>
             <nav className="flex bg-[#1a1625]/80 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 shadow-xl">
-               <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white shadow-lg shadow-lilla-500/20' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>
                  <Home size={16} /> Home
                </button>
-               <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white shadow-lg shadow-lilla-500/20' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>
                  <PieChartIcon size={16} /> Analisi
                </button>
-               <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white shadow-lg shadow-lilla-500/20' : 'text-gray-500 hover:text-white'}`}>
+               <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>
                  <Settings size={16} /> Archivio
                </button>
             </nav>
@@ -602,13 +606,13 @@ export default function App() {
 
        {resetModalOpen && (
          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-in fade-in">
-            <div className="bg-red-950/20 border border-red-500/40 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl text-center">
-                <div className="bg-red-600 p-6 rounded-full text-white mx-auto mb-8 w-fit animate-pulse"><AlertTriangle size={48} /></div>
-                <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">SVUOTA TUTTO?</h3>
-                <p className="text-red-200/60 text-sm mb-10">L'operazione è irreversibile sia in locale che in cloud.</p>
+            <div className="bg-rose-950/20 border border-rose-500/40 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl text-center">
+                <div className="bg-rose-600 p-6 rounded-full text-white mx-auto mb-8 w-fit animate-pulse"><AlertTriangle size={48} /></div>
+                <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">RESET COMPLETO?</h3>
+                <p className="text-rose-200/60 text-sm mb-10">L'operazione cancellerà tutti i dati in locale e cloud.</p>
                 <div className="flex flex-col gap-3">
                   <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 py-5 rounded-2xl font-black uppercase text-xs transition-all">Annulla</button>
-                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-red-600 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-red-600/30 transition-all">Conferma Reset</button>
+                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-rose-600 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-rose-600/30 transition-all">Conferma Reset</button>
                 </div>
             </div>
          </div>
