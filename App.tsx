@@ -19,7 +19,8 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
-  ArrowDownCircle
+  ArrowDownCircle,
+  List
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
@@ -130,13 +131,11 @@ export default function App() {
   // --- Inizializzazione e Sincronizzazione Cloud ---
   useEffect(() => {
     const loadInitialData = async () => {
-      // 1. Carica da localStorage per velocità
       const sTx = localStorage.getItem(STORAGE_KEY);
       const sFx = localStorage.getItem(FIXED_EXPENSES_KEY);
       if (sTx) setTransactions(JSON.parse(sTx));
       if (sFx) setFixedExpenses(JSON.parse(sFx));
 
-      // 2. Prova a inizializzare e scaricare da Neon
       if (process.env.DATABASE_URL) {
         setDbStatus('syncing');
         await initDb();
@@ -180,15 +179,24 @@ export default function App() {
       category: selectedCategory.id, 
       amount: v, 
       description, 
-      date 
+      date: new Date(date).toISOString()
     };
 
     setTransactions(prev => [newTx, ...prev]);
     setTxModalOpen(false);
+    setAmount('');
+    setDescription('');
 
     // Salva su Cloud
     setDbStatus('syncing');
     await saveTransactionDb(newTx);
+    setDbStatus('connected');
+  };
+
+  const handleDeleteTransaction = async (id: string) => {
+    setTransactions(prev => prev.filter(t => t.id !== id));
+    setDbStatus('syncing');
+    await deleteTransactionDb(id);
     setDbStatus('connected');
   };
 
@@ -209,7 +217,6 @@ export default function App() {
       return fe;
     }));
 
-    // Salva su Cloud
     if (updatedExpense) {
       setDbStatus('syncing');
       await saveFixedExpenseDb(updatedExpense);
@@ -234,7 +241,7 @@ export default function App() {
   const monthlyTrans = useMemo(() => transactions.filter(t => {
     const d = new Date(t.date); 
     return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
-  }), [transactions, currentDate]);
+  }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [transactions, currentDate]);
 
   const monthlyInc = monthlyTrans.filter(t => t.type === 'income').reduce((a, b) => a + b.amount, 0);
   const monthlyManExp = monthlyTrans.filter(t => t.type === 'expense').reduce((a, b) => a + b.amount, 0);
@@ -375,6 +382,65 @@ export default function App() {
         </div>
       </section>
 
+      {/* REGISTRO PRIMA NOTA */}
+      <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative">
+        <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6">
+           <List className="text-lilla-400" size={20}/> Prima Nota (Movimenti)
+        </h2>
+        
+        <div className="overflow-x-auto custom-scrollbar max-h-96">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10">
+              <tr>
+                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Data</th>
+                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Categoria</th>
+                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Nota</th>
+                <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Importo</th>
+                <th className="py-3 px-4 w-10"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {monthlyTrans.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center text-gray-500 italic font-medium">Nessun movimento registrato questo mese.</td>
+                </tr>
+              ) : (
+                monthlyTrans.map(tx => {
+                  const cat = DEFAULT_CATEGORIES.find(c => c.id === tx.category);
+                  return (
+                    <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
+                      <td className="py-4 px-4 text-xs font-bold text-gray-400 whitespace-nowrap">
+                        {new Date(tx.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{cat?.icon || '💰'}</span>
+                          <span className="font-bold text-gray-200">{cat?.label || tx.category}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-xs text-gray-400 italic max-w-[200px] truncate">
+                        {tx.description || '-'}
+                      </td>
+                      <td className={`py-4 px-4 text-right font-black ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {tx.type === 'income' ? '+' : '-'}{tx.amount.toFixed(2)}€
+                      </td>
+                      <td className="py-4 px-4 text-right">
+                        <button 
+                          onClick={() => handleDeleteTransaction(tx.id)}
+                          className="p-2 text-gray-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section className="space-y-6">
           <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black mb-4 flex items-center gap-3">
             <ArrowDownCircle className="text-rose-400" /> Movimenti Extra
@@ -481,9 +547,9 @@ export default function App() {
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-lilla-300 leading-none">Fabia Budget</h1>
-                  {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} />}
-                  {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} />}
-                  {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} />}
+                  {dbStatus === 'connected' && <Cloud className="text-emerald-400 animate-pulse" size={18} title="Sincronizzato Cloud" />}
+                  {dbStatus === 'syncing' && <RefreshCw className="text-amber-400 animate-spin" size={18} title="Sincronizzazione in corso..." />}
+                  {dbStatus === 'error' && <CloudOff className="text-rose-500" size={18} title="Errore Cloud - Solo Locale" />}
                 </div>
                 <p className="text-[10px] text-lilla-400 font-black uppercase tracking-[0.25em] mt-1">Gestione Casa</p>
               </div>
@@ -522,6 +588,15 @@ export default function App() {
              </div>
              <div className="space-y-6">
                 <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Data</label>
+                  <input 
+                    type="date" 
+                    value={date} 
+                    onChange={(e) => setDate(e.target.value)} 
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-widest ml-1">Importo (€)</label>
                   <input 
                     type="number" 
@@ -555,7 +630,7 @@ export default function App() {
                   <AlertTriangle size={48} />
                 </div>
                 <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">RESET TOTALE?</h3>
-                <p className="text-red-200/60 text-sm mb-10">Tutte le transazioni e le rate verranno cancellate.</p>
+                <p className="text-red-200/60 text-sm mb-10">Tutte le transazioni e le rate verranno cancellate dal cloud e dal dispositivo.</p>
                 <div className="flex flex-col gap-3">
                   <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 hover:bg-white/10 py-5 rounded-2xl font-black uppercase text-xs transition-all">
                     Annulla
@@ -563,7 +638,6 @@ export default function App() {
                   <button 
                     onClick={async () => { 
                       localStorage.clear(); 
-                      // Potrebbe essere utile un comando di pulizia DB qui
                       window.location.reload(); 
                     }} 
                     className="w-full bg-red-600 hover:bg-red-700 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-red-600/30 transition-all"
