@@ -1,19 +1,19 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Home, 
-  PieChart as PieChartIcon, 
-  Trash2, 
-  X, 
-  Wallet, 
-  TrendingUp, 
-  TrendingDown, 
-  Settings, 
-  CheckCircle2, 
-  AlertTriangle, 
-  ChevronLeft, 
-  ChevronRight, 
-  Check, 
+import {
+  Home,
+  PieChart as PieChartIcon,
+  Trash2,
+  X,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  Settings,
+  CheckCircle2,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Check,
   CreditCard,
   AlertCircle,
   Cloud,
@@ -74,10 +74,10 @@ const COLORS = ['#8B5CF6', '#3B82F6', '#EC4899', '#F59E0B', '#EF4444', '#10B981'
 const STORAGE_KEY = 'fabia_budget_tx_v4';
 const FIXED_KEY = 'fabia_budget_fx_v4';
 
-const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: { 
-  title: string; 
-  amount: number; 
-  type: 'income' | 'expense' | 'total'; 
+const StatCard = ({ title, amount, type, isVisible, subtitle, highlight }: {
+  title: string;
+  amount: number;
+  type: 'income' | 'expense' | 'total';
   isVisible: boolean;
   subtitle?: string;
   highlight?: boolean;
@@ -107,7 +107,7 @@ export default function App() {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  
+
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [deleteFixedModalOpen, setDeleteFixedModalOpen] = useState(false);
   const [fixedToDelete, setFixedToDelete] = useState<string | null>(null);
@@ -120,7 +120,7 @@ export default function App() {
       const localFx = localStorage.getItem(FIXED_KEY);
       if (localTx) setTransactions(JSON.parse(localTx));
       if (localFx) setFixedExpenses(JSON.parse(localFx));
-      
+
       await syncWithCloud();
       setIsLoading(false);
     };
@@ -137,14 +137,40 @@ export default function App() {
       await initDb();
       const cloudData = await fetchAllData();
       if (cloudData) {
+        // Sincronizza transactions
         if (cloudData.transactions) {
           setTransactions(cloudData.transactions);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudData.transactions));
         }
-        if (cloudData.fixedExpenses?.length) {
-          setFixedExpenses(cloudData.fixedExpenses);
-          localStorage.setItem(FIXED_KEY, JSON.stringify(cloudData.fixedExpenses));
+
+        // Sincronizzazione intelligente delle fixed expenses:
+        // Usa DEFAULT_FIXED_EXPENSES come base, aggiorna paidMonths dal cloud
+        const cloudExpenseMap = new Map(
+          (cloudData.fixedExpenses || []).map(fe => [fe.id, fe])
+        );
+
+        const mergedExpenses: FixedExpense[] = DEFAULT_FIXED_EXPENSES.map(defaultFe => {
+          const cloudFe = cloudExpenseMap.get(defaultFe.id);
+          if (cloudFe) {
+            // Mantieni i dati di default ma aggiorna paidMonths dal cloud
+            return {
+              ...defaultFe,
+              paidMonths: cloudFe.paidMonths || []
+            };
+          }
+          return { ...defaultFe };
+        });
+
+        setFixedExpenses(mergedExpenses);
+        localStorage.setItem(FIXED_KEY, JSON.stringify(mergedExpenses));
+
+        // Sincronizza voci mancanti nel cloud
+        for (const fe of mergedExpenses) {
+          if (!cloudExpenseMap.has(fe.id)) {
+            await saveFixedExpenseDb(fe);
+          }
         }
+
         setDbStatus('connected');
       }
     } catch (err) {
@@ -188,13 +214,13 @@ export default function App() {
     if (!expense) return;
     const isPaid = expense.paidMonths.includes(currentMonthKey);
     const transactionId = `pay-${id}-${currentMonthKey}`;
-    
+
     let updatedExpense: FixedExpense | null = null;
     const newFixed = safeFixedExpenses.map(fe => {
       if (fe.id === id) {
         updatedExpense = { ...fe, paidMonths: isPaid ? fe.paidMonths.filter(m => m !== currentMonthKey) : [...fe.paidMonths, currentMonthKey] };
         return updatedExpense;
-      } 
+      }
       return fe;
     });
 
@@ -220,23 +246,23 @@ export default function App() {
 
   const notifications = useMemo(() => {
     const alerts: any[] = [];
-    const today = new Date(); today.setHours(0,0,0,0);
-    
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+
     safeFixedExpenses.forEach(fe => {
       const isPaid = fe.paidMonths.includes(currentMonthKey);
-      
+
       // Controllo Scadenze Puntuali (es. AdE)
       if (fe.dueDate) {
         const dDate = new Date(fe.dueDate);
-        const diff = Math.ceil((dDate.getTime() - today.getTime()) / (1000*60*60*24));
+        const diff = Math.ceil((dDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         if (!isPaid) {
           if (diff < 0) alerts.push({ id: `err-${fe.id}`, title: 'SCADUTO', text: `${fe.label} del ${fe.dueDate.split('-').reverse().join('/')} non risulta pagato!`, type: 'critical' });
           else if (diff <= 7) alerts.push({ id: `warn-${fe.id}`, title: 'IN SCADENZA', text: `${fe.label} scade tra ${diff === 0 ? 'OGGI' : diff + ' giorni'} (${fe.dueDate.split('-').reverse().join('/')})`, type: 'warning' });
         }
-      } 
+      }
       // Controllo Spese Mensili (Promemoria dopo il 10 del mese)
       else if (!isPaid && fe.group === 'mensile' && today.getDate() > 10) {
-         alerts.push({ id: `info-${fe.id}`, title: 'PROMEMORIA', text: `Ricordati di registrare il pagamento per ${fe.label} questo mese.`, type: 'info' });
+        alerts.push({ id: `info-${fe.id}`, title: 'PROMEMORIA', text: `Ricordati di registrare il pagamento per ${fe.label} questo mese.`, type: 'info' });
       }
     });
     return alerts;
@@ -249,7 +275,7 @@ export default function App() {
 
   const monthlyTrans = useMemo(() => safeTransactions.filter(t => {
     const d = new Date(t.date); return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
-  }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [safeTransactions, currentDate]);
+  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [safeTransactions, currentDate]);
 
   const monthlyExp = useMemo(() => monthlyTrans.filter(t => t.type === 'expense').reduce((a, b) => a + b.amount, 0), [monthlyTrans]);
   const monthlyInc = useMemo(() => monthlyTrans.filter(t => t.type === 'income').reduce((a, b) => a + b.amount, 0), [monthlyTrans]);
@@ -283,291 +309,291 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-darksoft text-gray-100 font-sans pb-10 relative overflow-x-hidden">
-       <div className="fixed inset-0 pointer-events-none z-0">
-         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"></div>
-         <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-lilla-600/5 rounded-full blur-[140px]"></div>
-       </div>
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px]"></div>
+        <div className="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] bg-lilla-600/5 rounded-full blur-[140px]"></div>
+      </div>
 
-       <div className="relative z-10 max-w-6xl mx-auto px-4 py-6">
-          <header className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-6">
-            <div className="cursor-pointer group flex items-center gap-4" onClick={() => setView('home')}>
-              <div className="bg-gradient-to-br from-lilla-500 to-purple-600 p-2.5 rounded-2xl text-white shadow-neon transform group-hover:scale-110 transition-all">
-                <Wallet size={28} />
+      <div className="relative z-10 max-w-6xl mx-auto px-4 py-6">
+        <header className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-6">
+          <div className="cursor-pointer group flex items-center gap-4" onClick={() => setView('home')}>
+            <div className="bg-gradient-to-br from-lilla-500 to-purple-600 p-2.5 rounded-2xl text-white shadow-neon transform group-hover:scale-110 transition-all">
+              <Wallet size={28} />
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-lilla-300 leading-none">Fabia Budget</h1>
+                <button onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} className="hover:scale-110 transition-transform">
+                  {dbStatus === 'connected' ? <Cloud className="text-emerald-400" size={18} /> : dbStatus === 'syncing' ? <RefreshCw className="text-amber-400 animate-spin" size={18} /> : <CloudOff className="text-rose-500" size={18} />}
+                </button>
+                <button onClick={() => setNotifPanelOpen(!notifPanelOpen)} className="relative hover:scale-110 transition-transform">
+                  <Bell className={notifications.length > 0 ? 'text-amber-400 animate-pulse' : 'text-gray-500'} size={20} />
+                  {notifications.length > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-darksoft">{notifications.length}</span>}
+                </button>
               </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-lilla-300 leading-none">Fabia Budget</h1>
-                  <button onClick={(e) => { e.stopPropagation(); syncWithCloud(); }} className="hover:scale-110 transition-transform">
-                    {dbStatus === 'connected' ? <Cloud className="text-emerald-400" size={18} /> : dbStatus === 'syncing' ? <RefreshCw className="text-amber-400 animate-spin" size={18} /> : <CloudOff className="text-rose-500" size={18} />}
-                  </button>
-                  <button onClick={() => setNotifPanelOpen(!notifPanelOpen)} className="relative hover:scale-110 transition-transform">
-                    <Bell className={notifications.length > 0 ? 'text-amber-400 animate-pulse' : 'text-gray-500'} size={20} />
-                    {notifications.length > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full border-2 border-darksoft">{notifications.length}</span>}
-                  </button>
-                </div>
-                <p className="text-[10px] text-lilla-400 font-black uppercase tracking-[0.25em] mt-1">Gestione Familiare</p>
+              <p className="text-[10px] text-lilla-400 font-black uppercase tracking-[0.25em] mt-1">Gestione Familiare</p>
+            </div>
+          </div>
+          <nav className="flex bg-[#1a1625]/80 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 shadow-xl">
+            <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><Home size={16} /> Home</button>
+            <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><PieChartIcon size={16} /> Analisi</button>
+            <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><Settings size={16} /> Archivio</button>
+          </nav>
+        </header>
+
+        {notifPanelOpen && (
+          <div className="absolute right-4 top-24 z-[90] w-full max-w-xs animate-in slide-in-from-top-4 fade-in duration-300">
+            <div className="bg-[#1a1625]/95 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-lilla-300 flex items-center gap-2"><Bell size={14} /> Centro Notifiche</h3>
+                <button onClick={() => setNotifPanelOpen(false)} className="text-gray-500 hover:text-white"><X size={16} /></button>
+              </div>
+              <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar">
+                {notifications.length === 0 ? (
+                  <div className="text-center py-6">
+                    <CheckCircle2 className="mx-auto text-emerald-500/30 mb-2" size={32} />
+                    <p className="text-[10px] text-gray-500 font-bold uppercase">Tutto in regola!</p>
+                  </div>
+                ) : notifications.map(n => (
+                  <div key={n.id} className={`p-3 rounded-xl border flex gap-3 items-start ${n.type === 'critical' ? 'bg-rose-500/10 border-rose-500/30' : n.type === 'warning' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-lilla-500/10 border-lilla-500/30'}`}>
+                    <div className="mt-0.5">
+                      {n.type === 'critical' ? <AlertTriangle className="text-rose-500" size={14} /> : n.type === 'warning' ? <AlertCircle className="text-amber-500" size={14} /> : <Info className="text-lilla-400" size={14} />}
+                    </div>
+                    <div>
+                      <p className={`text-[10px] font-black uppercase mb-1 ${n.type === 'critical' ? 'text-rose-400' : n.type === 'warning' ? 'text-amber-400' : 'text-lilla-300'}`}>{n.title}</p>
+                      <p className="text-[11px] font-bold text-gray-300 leading-tight">{n.text}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-            <nav className="flex bg-[#1a1625]/80 backdrop-blur-md rounded-2xl p-1.5 border border-white/10 shadow-xl">
-               <button onClick={() => setView('home')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'home' ? 'bg-lilla-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><Home size={16} /> Home</button>
-               <button onClick={() => setView('reports')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'reports' ? 'bg-lilla-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><PieChartIcon size={16} /> Analisi</button>
-               <button onClick={() => setView('settings')} className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black transition-all uppercase tracking-widest ${view === 'settings' ? 'bg-lilla-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><Settings size={16} /> Archivio</button>
-            </nav>
-          </header>
+          </div>
+        )}
 
-          {notifPanelOpen && (
-            <div className="absolute right-4 top-24 z-[90] w-full max-w-xs animate-in slide-in-from-top-4 fade-in duration-300">
-               <div className="bg-[#1a1625]/95 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-lilla-300 flex items-center gap-2"><Bell size={14} /> Centro Notifiche</h3>
-                    <button onClick={() => setNotifPanelOpen(false)} className="text-gray-500 hover:text-white"><X size={16} /></button>
+        <main className="max-w-5xl mx-auto">
+          {view === 'home' && (
+            <div className="space-y-8 animate-in fade-in pb-10">
+              <div className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 shadow-lg mx-1">
+                <button onClick={() => changeMonth(-1)} className="p-2 text-lilla-400 hover:text-white transition-colors"><ChevronLeft size={24} /></button>
+                <div className="flex flex-col items-center text-center">
+                  <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Mese Corrente</span>
+                  <span className="text-lg font-black text-white capitalize leading-none">{getMonthName(currentDate)}</span>
+                </div>
+                <button onClick={() => changeMonth(1)} className="p-2 text-lilla-400 hover:text-white transition-colors"><ChevronRight size={24} /></button>
+              </div>
+
+              <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <StatCard title="Entrate + Residuo" amount={totalAvail} type="income" isVisible={true} subtitle={`Residuo: ${residue.toFixed(2)}€`} />
+                <StatCard title="Uscite Totali" amount={monthlyExp} type="expense" isVisible={true} />
+                <StatCard title="Budget Attuale" amount={currentBal} type="total" isVisible={true} highlight />
+              </section>
+
+              <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3">
+                    <CheckCircle2 className="text-lilla-400" size={20} /> Monitor Fisse & Scadenze
+                  </h2>
+                  <span className="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-500 font-black">Piano Spese Ricorrenti</span>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-[10px] text-lilla-400 font-black uppercase tracking-widest border-b border-white/5 pb-1 mb-4">Spese Mensili</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {safeFixedExpenses.filter(fe => fe.group === 'mensile').map(fe => {
+                        const p = fe.paidMonths.includes(currentMonthKey);
+                        return (
+                          <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40 shadow-inner' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}>
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="text-xl">{fe.icon}</span>
+                              <div className="text-left truncate">
+                                <p className={`font-bold text-xs truncate ${p ? 'text-emerald-300' : 'text-gray-200'}`}>{fe.label}</p>
+                                <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
+                              </div>
+                            </div>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${p ? 'bg-emerald-500 text-white' : 'bg-white/10'}`}>
+                              {p && <Check size={12} strokeWidth={4} />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="space-y-3 max-h-80 overflow-y-auto custom-scrollbar">
-                    {notifications.length === 0 ? (
-                       <div className="text-center py-6">
-                         <CheckCircle2 className="mx-auto text-emerald-500/30 mb-2" size={32} />
-                         <p className="text-[10px] text-gray-500 font-bold uppercase">Tutto in regola!</p>
-                       </div>
-                    ) : notifications.map(n => (
-                      <div key={n.id} className={`p-3 rounded-xl border flex gap-3 items-start ${n.type === 'critical' ? 'bg-rose-500/10 border-rose-500/30' : n.type === 'warning' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-lilla-500/10 border-lilla-500/30'}`}>
-                         <div className="mt-0.5">
-                           {n.type === 'critical' ? <AlertTriangle className="text-rose-500" size={14} /> : n.type === 'warning' ? <AlertCircle className="text-amber-500" size={14} /> : <Info className="text-lilla-400" size={14} />}
-                         </div>
-                         <div>
-                           <p className={`text-[10px] font-black uppercase mb-1 ${n.type === 'critical' ? 'text-rose-400' : n.type === 'warning' ? 'text-amber-400' : 'text-lilla-300'}`}>{n.title}</p>
-                           <p className="text-[11px] font-bold text-gray-300 leading-tight">{n.text}</p>
-                         </div>
-                      </div>
-                    ))}
+
+                  <div>
+                    <h3 className="text-[10px] text-amber-500 font-black uppercase tracking-widest border-b border-white/5 pb-1 mb-4">Extra & Scadenze Fiscali</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {safeFixedExpenses.filter(fe => fe.group !== 'mensile').filter(fe => !fe.dueDate || (new Date(fe.dueDate).getFullYear() === currentDate.getFullYear() && new Date(fe.dueDate).getMonth() === currentDate.getMonth())).map(fe => {
+                        const p = fe.paidMonths.includes(currentMonthKey);
+                        const isFiscal = !!fe.dueDate;
+                        return (
+                          <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${p ? 'bg-emerald-500/10 border-emerald-500/40 shadow-inner' : (isFiscal ? 'bg-rose-950/20 border-rose-500/40 shadow-lg shadow-rose-600/10' : 'bg-white/5 border-white/10 hover:border-lilla-500/30')}`}>
+                            {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-rose-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Rata</span>}
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="text-xl">{fe.icon}</span>
+                              <div className="text-left truncate">
+                                <p className={`font-bold text-xs truncate ${p ? 'text-emerald-300' : (isFiscal ? 'text-rose-400' : 'text-gray-200')}`}>{fe.label}</p>
+                                <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
+                              </div>
+                            </div>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${p ? 'bg-emerald-500 text-white' : 'bg-white/10'}`}>
+                              {p && <Check size={12} strokeWidth={4} />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-               </div>
+                </div>
+              </section>
+
+              <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6"><List className="text-lilla-400" size={20} /> Registro Movimenti</h2>
+                <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10">
+                      <tr>
+                        <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Data</th>
+                        <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Operazione</th>
+                        <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Importo</th>
+                        <th className="py-3 px-4 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {monthlyTrans.length === 0 ? <tr><td colSpan={4} className="py-8 text-center text-gray-600 italic font-medium">Nessuna operazione registrata questo mese</td></tr> : monthlyTrans.map(tx => {
+                        const cat = DEFAULT_CATEGORIES.find(c => c.id === tx.category);
+                        const isAuto = tx.id.startsWith('pay-');
+                        return (
+                          <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
+                            <td className="py-4 px-4 text-xs font-bold text-gray-400">{new Date(tx.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}</td>
+                            <td className="py-4 px-4"><div className="flex items-center gap-2"><span className="text-lg">{cat?.icon || (isAuto ? '💸' : '💰')}</span><div className="flex flex-col"><span className="font-bold text-gray-200 truncate">{cat?.label || tx.category}</span>{isAuto && <span className="text-[8px] text-emerald-500 font-black uppercase">Spesa Fissa</span>}</div></div></td>
+                            <td className={`py-4 px-4 text-right font-black ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>{tx.type === 'income' ? '+' : '-'}{tx.amount.toFixed(2)}€</td>
+                            <td className="py-4 px-4 text-right"><button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 text-gray-600 hover:text-rose-500 transition-all transform hover:scale-110"><Trash2 size={16} /></button></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="space-y-6">
+                <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black mb-4 flex items-center gap-3"><ArrowDownCircle className="text-rose-400" /> Movimento Extra</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                  {DEFAULT_CATEGORIES.map(cat => (
+                    <NeonButton key={cat.id} onClick={() => { setSelectedCategory(cat); setTxModalOpen(true); }} color={cat.colorName} square>
+                      <span className="text-4xl">{cat.icon}</span>
+                      <span className="text-xs font-bold mt-2 uppercase">{cat.label}</span>
+                    </NeonButton>
+                  ))}
+                </div>
+              </section>
+
+              <section className="bg-lilla-900/10 border border-lilla-500/20 rounded-3xl p-8 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Sparkles size={120} /></div>
+                <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-4"><Sparkles className="text-lilla-400" size={20} /> Assistente Gemini</h2>
+                <p className="text-sm text-gray-400 mb-6 leading-relaxed">{advice || "Hai bisogno di un'analisi rapida del tuo budget? Chiedi consiglio al nostro assistente intelligente per ottimizzare le spese della famiglia."}</p>
+                <button onClick={getAdvice} className="bg-lilla-600 text-white font-black px-6 py-3 rounded-2xl text-xs uppercase tracking-widest hover:bg-lilla-500 shadow-lg shadow-lilla-600/20 transition-all">Analizza Conti</button>
+              </section>
             </div>
           )}
 
-          <main className="max-w-5xl mx-auto">
-            {view === 'home' && (
-              <div className="space-y-8 animate-in fade-in pb-10">
-                <div className="flex items-center justify-between bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 shadow-lg mx-1">
-                  <button onClick={() => changeMonth(-1)} className="p-2 text-lilla-400 hover:text-white transition-colors"><ChevronLeft size={24} /></button>
-                  <div className="flex flex-col items-center text-center">
-                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Mese Corrente</span>
-                    <span className="text-lg font-black text-white capitalize leading-none">{getMonthName(currentDate)}</span>
+          {view === 'reports' && (
+            <div className="space-y-8 animate-in slide-in-from-right px-1">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
+                  <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Spese per Voce</h3>
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={expensesByCategory} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                          {expensesByCategory.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ backgroundColor: '#1a1625', border: 'none', borderRadius: '16px', color: '#fff' }} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                  <button onClick={() => changeMonth(1)} className="p-2 text-lilla-400 hover:text-white transition-colors"><ChevronRight size={24} /></button>
                 </div>
-
-                <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <StatCard title="Entrate + Residuo" amount={totalAvail} type="income" isVisible={true} subtitle={`Residuo: ${residue.toFixed(2)}€`} />
-                  <StatCard title="Uscite Totali" amount={monthlyExp} type="expense" isVisible={true} />
-                  <StatCard title="Budget Attuale" amount={currentBal} type="total" isVisible={true} highlight />
-                </section>
-
-                <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3">
-                       <CheckCircle2 className="text-lilla-400" size={20}/> Monitor Fisse & Scadenze
-                    </h2>
-                    <span className="text-[10px] bg-white/5 px-2 py-1 rounded text-gray-500 font-black">Piano Spese Ricorrenti</span>
-                  </div>
-                  
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-[10px] text-lilla-400 font-black uppercase tracking-widest border-b border-white/5 pb-1 mb-4">Spese Mensili</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {safeFixedExpenses.filter(fe => fe.group === 'mensile').map(fe => {
-                          const p = fe.paidMonths.includes(currentMonthKey);
-                          return (
-                            <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${p ? 'bg-emerald-500/10 border-emerald-500/40 shadow-inner' : 'bg-white/5 border-white/10 hover:border-lilla-500/30'}`}>
-                              <div className="flex items-center gap-2 truncate">
-                                <span className="text-xl">{fe.icon}</span>
-                                <div className="text-left truncate">
-                                  <p className={`font-bold text-xs truncate ${p ? 'text-emerald-300' : 'text-gray-200'}`}>{fe.label}</p>
-                                  <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
-                                </div>
-                              </div>
-                              <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${p ? 'bg-emerald-500 text-white' : 'bg-white/10'}`}>
-                                {p && <Check size={12} strokeWidth={4} />}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-[10px] text-amber-500 font-black uppercase tracking-widest border-b border-white/5 pb-1 mb-4">Extra & Scadenze Fiscali</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {safeFixedExpenses.filter(fe => fe.group !== 'mensile').filter(fe => !fe.dueDate || (new Date(fe.dueDate).getFullYear() === currentDate.getFullYear() && new Date(fe.dueDate).getMonth() === currentDate.getMonth())).map(fe => {
-                          const p = fe.paidMonths.includes(currentMonthKey);
-                          const isFiscal = !!fe.dueDate;
-                          return (
-                            <button key={fe.id} onClick={() => togglePaidFixed(fe.id)} className={`flex items-center justify-between p-3 rounded-2xl border transition-all relative ${p ? 'bg-emerald-500/10 border-emerald-500/40 shadow-inner' : (isFiscal ? 'bg-rose-950/20 border-rose-500/40 shadow-lg shadow-rose-600/10' : 'bg-white/5 border-white/10 hover:border-lilla-500/30')}`}>
-                              {isFiscal && !p && <span className="absolute -top-2 -right-1 bg-rose-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase">Rata</span>}
-                              <div className="flex items-center gap-2 truncate">
-                                <span className="text-xl">{fe.icon}</span>
-                                <div className="text-left truncate">
-                                  <p className={`font-bold text-xs truncate ${p ? 'text-emerald-300' : (isFiscal ? 'text-rose-400' : 'text-gray-200')}`}>{fe.label}</p>
-                                  <p className="text-[10px] text-gray-500 font-black">{fe.amount.toFixed(2)}€</p>
-                                </div>
-                              </div>
-                              <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${p ? 'bg-emerald-500 text-white' : 'bg-white/10'}`}>
-                                {p && <Check size={12} strokeWidth={4} />}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="bg-[#1a1625] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-                  <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-6"><List className="text-lilla-400" size={20}/> Registro Movimenti</h2>
-                  <div className="overflow-x-auto custom-scrollbar max-h-[400px]">
-                    <table className="w-full text-left text-sm border-collapse">
-                      <thead className="sticky top-0 bg-[#1a1625] z-10 border-b border-white/10">
-                        <tr>
-                          <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Data</th>
-                          <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Operazione</th>
-                          <th className="py-3 px-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Importo</th>
-                          <th className="py-3 px-4 w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {monthlyTrans.length === 0 ? <tr><td colSpan={4} className="py-8 text-center text-gray-600 italic font-medium">Nessuna operazione registrata questo mese</td></tr> : monthlyTrans.map(tx => {
-                          const cat = DEFAULT_CATEGORIES.find(c => c.id === tx.category);
-                          const isAuto = tx.id.startsWith('pay-');
-                          return (
-                            <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
-                              <td className="py-4 px-4 text-xs font-bold text-gray-400">{new Date(tx.date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}</td>
-                              <td className="py-4 px-4"><div className="flex items-center gap-2"><span className="text-lg">{cat?.icon || (isAuto ? '💸' : '💰')}</span><div className="flex flex-col"><span className="font-bold text-gray-200 truncate">{cat?.label || tx.category}</span>{isAuto && <span className="text-[8px] text-emerald-500 font-black uppercase">Spesa Fissa</span>}</div></div></td>
-                              <td className={`py-4 px-4 text-right font-black ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>{tx.type === 'income' ? '+' : '-'}{tx.amount.toFixed(2)}€</td>
-                              <td className="py-4 px-4 text-right"><button onClick={() => handleDeleteTransaction(tx.id)} className="p-2 text-gray-600 hover:text-rose-500 transition-all transform hover:scale-110"><Trash2 size={16} /></button></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-
-                <section className="space-y-6">
-                    <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black mb-4 flex items-center gap-3"><ArrowDownCircle className="text-rose-400" /> Movimento Extra</h2>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                        {DEFAULT_CATEGORIES.map(cat => (
-                          <NeonButton key={cat.id} onClick={() => { setSelectedCategory(cat); setTxModalOpen(true); }} color={cat.colorName} square>
-                            <span className="text-4xl">{cat.icon}</span>
-                            <span className="text-xs font-bold mt-2 uppercase">{cat.label}</span>
-                          </NeonButton>
-                        ))}
-                    </div>
-                </section>
-
-                <section className="bg-lilla-900/10 border border-lilla-500/20 rounded-3xl p-8 relative overflow-hidden group">
-                   <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Sparkles size={120} /></div>
-                   <h2 className="text-lilla-100 text-lg uppercase tracking-widest font-black flex items-center gap-3 mb-4"><Sparkles className="text-lilla-400" size={20}/> Assistente Gemini</h2>
-                   <p className="text-sm text-gray-400 mb-6 leading-relaxed">{advice || "Hai bisogno di un'analisi rapida del tuo budget? Chiedi consiglio al nostro assistente intelligente per ottimizzare le spese della famiglia."}</p>
-                   <button onClick={getAdvice} className="bg-lilla-600 text-white font-black px-6 py-3 rounded-2xl text-xs uppercase tracking-widest hover:bg-lilla-500 shadow-lg shadow-lilla-600/20 transition-all">Analizza Conti</button>
-                </section>
+                <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5 flex flex-col items-center justify-center">
+                  <p className="text-lilla-400 font-black text-[10px] uppercase tracking-widest mb-2">Totale Uscite Mese</p>
+                  <p className="text-5xl font-black text-white">{monthlyExp.toFixed(2)}€</p>
+                </div>
               </div>
-            )}
-            
-            {view === 'reports' && (
-              <div className="space-y-8 animate-in slide-in-from-right px-1">
-                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5">
-                      <h3 className="text-lilla-200 mb-4 font-black uppercase text-xs tracking-widest text-center">Spese per Voce</h3>
-                      <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={expensesByCategory} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                              {expensesByCategory.map((_, i) => <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />)}
-                            </Pie>
-                            <Tooltip contentStyle={{ backgroundColor: '#1a1625', border: 'none', borderRadius: '16px', color: '#fff' }} />
-                            <Legend />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                    <div className="bg-[#1a1625] rounded-3xl p-6 shadow-xl border border-white/5 flex flex-col items-center justify-center">
-                       <p className="text-lilla-400 font-black text-[10px] uppercase tracking-widest mb-2">Totale Uscite Mese</p>
-                       <p className="text-5xl font-black text-white">{monthlyExp.toFixed(2)}€</p>
-                    </div>
-                 </div>
-              </div>
-            )}
-
-            {view === 'settings' && (
-              <div className="space-y-8 max-w-2xl mx-auto px-1">
-                <section className="bg-[#1a1625] rounded-3xl p-8 border border-white/5 shadow-2xl">
-                   <h2 className="text-xl font-black text-white mb-6 uppercase tracking-tight flex items-center gap-2"><Settings className="text-lilla-500" /> Manutenzione Archivio</h2>
-                   <div className="grid grid-cols-1 gap-4">
-                      <button onClick={() => setResetModalOpen(true)} className="w-full bg-rose-600/20 border border-rose-500/30 text-rose-100 font-black py-4 rounded-xl uppercase text-xs hover:bg-rose-600/30 transition-all">Svuota Registro (Hard Reset)</button>
-                      <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-white/5 border border-white/10 text-gray-400 font-black py-4 rounded-xl uppercase text-xs hover:bg-white/10 transition-all">Reset Cache Locale</button>
-                   </div>
-                </section>
-                
-                <section className="bg-lilla-950/20 border border-lilla-500/20 rounded-3xl p-8">
-                   <h3 className="text-xs font-black text-lilla-400 uppercase tracking-widest mb-4">Statistiche Globali</h3>
-                   <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                        <p className="text-[8px] text-gray-500 uppercase font-black">Operazioni Totali</p>
-                        <p className="text-xl font-black text-white">{safeTransactions.length}</p>
-                      </div>
-                      <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                        <p className="text-[8px] text-gray-500 uppercase font-black">Spese Fisse Censite</p>
-                        <p className="text-xl font-black text-white">{safeFixedExpenses.length}</p>
-                      </div>
-                   </div>
-                </section>
-              </div>
-            )}
-          </main>
-       </div>
-
-       {/* Modal Registrazione */}
-       {txModalOpen && selectedCategory && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in">
-           <div className="bg-[#13111C] border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative animate-in zoom-in-95">
-             <button onClick={() => setTxModalOpen(false)} className="absolute top-5 right-5 text-gray-500 hover:text-white transition-colors"><X size={20} /></button>
-             <div className="text-center mb-8">
-                <div className={`w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-5xl mb-4 ${selectedCategory.colorClass} text-white shadow-lg`}>{selectedCategory.icon}</div>
-                <h2 className="text-2xl font-black text-white uppercase tracking-tight">Registra {selectedCategory.label}</h2>
-             </div>
-             <div className="space-y-6">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-gray-500 ml-1 mb-1 block">Data</label>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-gray-500 ml-1 mb-1 block">Importo (€)</label>
-                  <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00 €" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-white text-center focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-gray-500 ml-1 mb-1 block">Nota Opzionale</label>
-                  <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Esempio: Spesa settimanale..." className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
-                </div>
-                <div className="pt-2">
-                  <NeonButton onClick={handleSaveTransaction} fullWidth color={selectedCategory.colorName}>Conferma Operazione</NeonButton>
-                </div>
-             </div>
-           </div>
-         </div>
-       )}
-
-       {resetModalOpen && (
-         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-in fade-in">
-            <div className="bg-rose-950/20 border border-rose-500/40 w-full max-w-md rounded-[2.5rem] p-10 text-center shadow-neon">
-                <AlertTriangle className="text-rose-600 mx-auto mb-8 animate-pulse" size={64} />
-                <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">CANCELLARE TUTTO?</h3>
-                <p className="text-rose-200/50 text-xs mb-8 leading-relaxed">Questa operazione rimuoverà ogni dato sia locale che in cloud. Assicurati di voler procedere con il reset completo del registro.</p>
-                <div className="flex flex-col gap-3">
-                  <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 py-5 rounded-2xl font-black uppercase text-xs transition-colors hover:bg-white/10">Annulla</button>
-                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-rose-600 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-rose-600/30 hover:bg-rose-500 transition-colors">Si, Procedi</button>
-                </div>
             </div>
-         </div>
-       )}
+          )}
+
+          {view === 'settings' && (
+            <div className="space-y-8 max-w-2xl mx-auto px-1">
+              <section className="bg-[#1a1625] rounded-3xl p-8 border border-white/5 shadow-2xl">
+                <h2 className="text-xl font-black text-white mb-6 uppercase tracking-tight flex items-center gap-2"><Settings className="text-lilla-500" /> Manutenzione Archivio</h2>
+                <div className="grid grid-cols-1 gap-4">
+                  <button onClick={() => setResetModalOpen(true)} className="w-full bg-rose-600/20 border border-rose-500/30 text-rose-100 font-black py-4 rounded-xl uppercase text-xs hover:bg-rose-600/30 transition-all">Svuota Registro (Hard Reset)</button>
+                  <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-white/5 border border-white/10 text-gray-400 font-black py-4 rounded-xl uppercase text-xs hover:bg-white/10 transition-all">Reset Cache Locale</button>
+                </div>
+              </section>
+
+              <section className="bg-lilla-950/20 border border-lilla-500/20 rounded-3xl p-8">
+                <h3 className="text-xs font-black text-lilla-400 uppercase tracking-widest mb-4">Statistiche Globali</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <p className="text-[8px] text-gray-500 uppercase font-black">Operazioni Totali</p>
+                    <p className="text-xl font-black text-white">{safeTransactions.length}</p>
+                  </div>
+                  <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <p className="text-[8px] text-gray-500 uppercase font-black">Spese Fisse Censite</p>
+                    <p className="text-xl font-black text-white">{safeFixedExpenses.length}</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Modal Registrazione */}
+      {txModalOpen && selectedCategory && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in">
+          <div className="bg-[#13111C] border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative animate-in zoom-in-95">
+            <button onClick={() => setTxModalOpen(false)} className="absolute top-5 right-5 text-gray-500 hover:text-white transition-colors"><X size={20} /></button>
+            <div className="text-center mb-8">
+              <div className={`w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-5xl mb-4 ${selectedCategory.colorClass} text-white shadow-lg`}>{selectedCategory.icon}</div>
+              <h2 className="text-2xl font-black text-white uppercase tracking-tight">Registra {selectedCategory.label}</h2>
+            </div>
+            <div className="space-y-6">
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-500 ml-1 mb-1 block">Data</label>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-500 ml-1 mb-1 block">Importo (€)</label>
+                <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00 €" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-4xl font-black text-white text-center focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-500 ml-1 mb-1 block">Nota Opzionale</label>
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Esempio: Spesa settimanale..." className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold focus:outline-none focus:ring-2 focus:ring-lilla-500/20" />
+              </div>
+              <div className="pt-2">
+                <NeonButton onClick={handleSaveTransaction} fullWidth color={selectedCategory.colorName}>Conferma Operazione</NeonButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl animate-in fade-in">
+          <div className="bg-rose-950/20 border border-rose-500/40 w-full max-w-md rounded-[2.5rem] p-10 text-center shadow-neon">
+            <AlertTriangle className="text-rose-600 mx-auto mb-8 animate-pulse" size={64} />
+            <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">CANCELLARE TUTTO?</h3>
+            <p className="text-rose-200/50 text-xs mb-8 leading-relaxed">Questa operazione rimuoverà ogni dato sia locale che in cloud. Assicurati di voler procedere con il reset completo del registro.</p>
+            <div className="flex flex-col gap-3">
+              <button onClick={() => setResetModalOpen(false)} className="w-full bg-white/5 py-5 rounded-2xl font-black uppercase text-xs transition-colors hover:bg-white/10">Annulla</button>
+              <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-rose-600 py-5 rounded-2xl font-black uppercase text-xs text-white shadow-xl shadow-rose-600/30 hover:bg-rose-500 transition-colors">Si, Procedi</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
