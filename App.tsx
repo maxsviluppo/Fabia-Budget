@@ -41,7 +41,7 @@ const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
   { id: 'cibo-zara', label: 'Cibo Zara', amount: 55, icon: '🐶', colorName: 'amber', paidMonths: [], group: 'mensile' },
   { id: 'tel-megan', label: 'Telefono Megan', amount: 36, icon: '📱', colorName: 'pink', paidMonths: [], group: 'mensile' },
   { id: 'tel-casa', label: 'Telefono Casa', amount: 45, icon: '☎️', colorName: 'cyan', paidMonths: [], group: 'mensile' },
-  { id: 'condo-gero', label: 'Condo Gerolomini', amount: 32, icon: '🏢', colorName: 'purple', paidMonths: [], group: 'mensile' },
+    { id: 'condo-gero', label: 'Condo Gerolimini', amount: 32, icon: '🏢', colorName: 'purple', paidMonths: [], group: 'mensile' },
   { id: 'condo-bagno', label: 'Condo Bagnoli', amount: 30, icon: '🏘️', colorName: 'purple', paidMonths: [], group: 'mensile' },
   { id: 'tel-mio-meg', label: 'Cell Io & Meg', amount: 20, icon: '📲', colorName: 'emerald', paidMonths: [], group: 'mensile' },
   { id: 'gest-line', label: 'Gest Lina', amount: 220, icon: '📉', colorName: 'gray', paidMonths: [], group: 'alternata' },
